@@ -323,3 +323,4 @@ with interpretation_tab:
     )
     st.caption(
         "SHAP feature-level explanations are not displayed in this dashboard yet."
+    )
