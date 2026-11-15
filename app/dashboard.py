@@ -1,127 +1,326 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import joblib
 import os
+
+import joblib
+import numpy as np
+import pandas as pd
+import streamlit as st
 from scipy.stats import entropy
 
-# --- PAGE CONFIGURATION ---
+
 st.set_page_config(
-    page_title="End-to-End Medical Triage Assistant | AI-CDSS",
+    page_title="Clinical Triage Assistant",
     page_icon="🏥",
-    layout="wide"
+    layout="wide",
 )
 
-# --- CUSTOM CSS STYLING FOR PROFESSIONAL LOOK ---
-st.markdown("""
+# ---------- Visual styling ----------
+st.markdown(
+    """
     <style>
-    .main { background-color: #0e1117; }
-    .stMetric { background-color: #1e293b; padding: 15px; border-radius: 10px; border: 1px solid #334155; }
-    h1, h2, h3 { color: #f8fafc; }
+    [data-testid="stAppViewContainer"] {
+        background: #f3f7fb;
+    }
+    [data-testid="stHeader"] {
+        background: transparent;
+    }
+    .block-container {
+        max-width: 1400px;
+        padding-top: 1.5rem;
+        padding-bottom: 3rem;
+    }
+    [data-testid="stMetric"] {
+        background: #ffffff;
+        border: 1px solid #dce6ee;
+        border-radius: 14px;
+        padding: 14px 16px;
+    }
+    .hero {
+        padding: 28px 30px;
+        border-radius: 20px;
+        color: white;
+        background: linear-gradient(115deg, #102a43, #176b87);
+        margin-bottom: 18px;
+    }
+    .hero p {
+        color: #e3f2f7;
+        margin-bottom: 0;
+    }
+    .eyebrow {
+        color: #b9e7ef;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
-# --- MODEL ARTIFACTS LOADER ---
+
+# ---------- Load trained model artifacts ----------
 @st.cache_resource
 def load_all_models():
     model_path = os.path.join("models", "best_calibrated_model.pkl")
-    prep_path = os.path.join("models", "preprocessor.pkl")
-    feat_path = os.path.join("models", "feature_names.pkl")
+    preprocessor_path = os.path.join("models", "preprocessor.pkl")
+    feature_path = os.path.join("models", "feature_names.pkl")
 
-    missing = [p for p in [model_path, prep_path, feat_path] if not os.path.exists(p)]
+    missing = [
+        path
+        for path in (model_path, preprocessor_path, feature_path)
+        if not os.path.exists(path)
+    ]
     if missing:
-        st.error(f"⚠️ Missing files: {missing}. Pehle terminal mein training scripts chalayein!")
+        st.error(f"Missing model files: {', '.join(missing)}")
+        st.info("Run the project's training steps to generate the model artifacts.")
         st.stop()
 
     model = joblib.load(model_path)
-    preprocessor = joblib.load(prep_path)
-    features = joblib.load(feat_path)
-    return model, preprocessor, features
+    preprocessor = joblib.load(preprocessor_path)
+    feature_names = joblib.load(feature_path)
+    return model, preprocessor, feature_names
+
 
 model, preprocessor, feature_names = load_all_models()
 
-# --- HEADER SECTION ---
-st.title("🏥 Clinical Emergency Triage Assistant (AI-CDSS)")
-st.caption("Lab #14 Complex Computing Activity • Multi-Model Risk Stratification with Platt Calibration & Shannon Entropy Uncertainty")
-st.markdown("---")
 
-# --- SIDEBAR: LIVE DEMO PRESETS ---
-st.sidebar.markdown("## ⚡ Live Presentation Controls")
-preset = st.sidebar.selectbox("Load Patient Scenario:", [
-    "Custom Manual Input", 
-    "🚨 Critical Shock Patient (Code Red)", 
-    "🟡 Urgent Monitored Patient (Code Yellow)",
-    "🟢 Routine Stable Patient (Code Green)"
-])
+# ---------- Scenario presets ----------
+DEFAULTS = {
+    "age": 62,
+    "gender": "Male",
+    "comorbidity": "None",
+    "heart_rate": 112,
+    "resp_rate": 26,
+    "systolic_bp": 88,
+    "spo2": 89,
+    "temp_c": 38.8,
+    "glucose": 210,
+    "gcs_score": 13,
+    "pain_score": 8,
+}
 
-d_age, d_gender, d_comorb = 62, "Male", "None"
-d_hr, d_rr, d_sbp, d_spo2, d_temp, d_gluc, d_gcs, d_pain = 112, 26, 88, 89, 38.8, 210, 13, 8
+SCENARIOS = {
+    "Custom Manual Input": {},
+    "🚨 Critical Shock Patient (Code Red)": {
+        "age": 68,
+        "gender": "Male",
+        "comorbidity": "Cardiovascular",
+        "heart_rate": 125,
+        "resp_rate": 28,
+        "systolic_bp": 82,
+        "spo2": 87,
+        "temp_c": 39.2,
+        "glucose": 290,
+        "gcs_score": 11,
+        "pain_score": 9,
+    },
+    "🟡 Urgent Monitored Patient (Code Yellow)": {
+        "age": 52,
+        "gender": "Female",
+        "comorbidity": "Diabetes",
+        "heart_rate": 98,
+        "resp_rate": 22,
+        "systolic_bp": 110,
+        "spo2": 94,
+        "temp_c": 38.1,
+        "glucose": 190,
+        "gcs_score": 14,
+        "pain_score": 5,
+    },
+    "🟢 Routine Stable Patient (Code Green)": {
+        "age": 28,
+        "gender": "Female",
+        "comorbidity": "None",
+        "heart_rate": 72,
+        "resp_rate": 16,
+        "systolic_bp": 120,
+        "spo2": 98,
+        "temp_c": 36.8,
+        "glucose": 95,
+        "gcs_score": 15,
+        "pain_score": 2,
+    },
+}
 
-if "Critical" in preset:
-    d_age, d_gender, d_comorb = 68, "Male", "Cardiovascular"
-    d_hr, d_rr, d_sbp, d_spo2, d_temp, d_gluc, d_gcs, d_pain = 125, 28, 82, 87, 39.2, 290, 11, 9
-elif "Urgent" in preset:
-    d_age, d_gender, d_comorb = 52, "Female", "Diabetes"
-    d_hr, d_rr, d_sbp, d_spo2, d_temp, d_gluc, d_gcs, d_pain = 98, 22, 110, 94, 38.1, 190, 14, 5
-elif "Routine" in preset:
-    d_age, d_gender, d_comorb = 28, "Female", "None"
-    d_hr, d_rr, d_sbp, d_spo2, d_temp, d_gluc, d_gcs, d_pain = 72, 16, 120, 98, 36.8, 95, 15, 2
 
-# --- MAIN LAYOUT ---
-col_vitals, col_decision = st.columns([1.1, 1.4])
+def apply_scenario():
+    selected = st.session_state["preset"]
+    values = SCENARIOS[selected]
+    for field, value in values.items():
+        st.session_state[field] = value
 
-with col_vitals:
-    st.subheader("📋 Patient EMR Intake & Vitals")
-    c1, c2 = st.columns(2)
-    with c1:
-        age = st.number_input("Age (Years)", 18, 95, d_age)
-        gender = st.selectbox("Gender", ["Male", "Female"], index=0 if d_gender=="Male" else 1)
-        comorbidity = st.selectbox("Comorbidity Profile", ["None", "Hypertension", "Diabetes", "Cardiovascular", "Asthma"], index=["None", "Hypertension", "Diabetes", "Cardiovascular", "Asthma"].index(d_comorb))
-        heart_rate = st.slider("Heart Rate (BPM)", 40, 185, d_hr)
-        resp_rate = st.slider("Respiratory Rate", 8, 45, d_rr)
-    with c2:
-        systolic_bp = st.slider("Systolic BP (mmHg)", 65, 230, d_sbp)
-        spo2 = st.slider("Blood Oxygen SpO2 (%)", 78, 100, d_spo2)
-        temp_c = st.number_input("Temp (°C)", 34.5, 41.5, d_temp, step=0.1)
-        glucose = st.number_input("Blood Glucose (mg/dL)", 50, 480, d_gluc)
-        gcs_score = st.selectbox("GCS Mental Score", [15, 14, 13, 11, 9, 6, 3], index=[15, 14, 13, 11, 9, 6, 3].index(d_gcs))
-        pain_score = st.slider("Pain Scale (0-10)", 0, 10, d_pain)
 
-    patient_raw = pd.DataFrame([{
-        'age': age, 'gender': gender, 'comorbidity': comorbidity,
-        'heart_rate': heart_rate, 'resp_rate': resp_rate,
-        'systolic_bp': systolic_bp, 'spo2': spo2, 'temp_c': temp_c,
-        'blood_glucose': glucose, 'gcs_score': gcs_score, 'pain_score': pain_score
-    }])
+for field, value in DEFAULTS.items():
+    st.session_state.setdefault(field, value)
 
-with col_decision:
-    st.subheader("⚡ Triage Stratification & Risk Assessment")
-    
-    transformed_data = preprocessor.transform(patient_raw)
-    probs = model.predict_proba(transformed_data)[0]
-    pred_class = int(np.argmax(probs))
-    
-    uncertainty = float(entropy(probs) / np.log(3))
-    
-    tiers = [
-        "LOW RISK (Standard Outpatient Queue)", 
-        "MEDIUM RISK (Urgent / Bed Needed)", 
-        "HIGH RISK (Immediate Resuscitation Bay)"
-    ]
-    colors = ["#22c55e", "#eab308", "#ef4444"]
-    
-    st.markdown(f"""
-    <div style='background:rgba(15,23,42,0.9); border-left: 8px solid {colors[pred_class]}; padding:16px 20px; border-radius:10px; margin-bottom:15px;'>
-        <h3 style='margin:0; color:{colors[pred_class]}; font-size: 21px;'>{tiers[pred_class]}</h3>
-        <p style='margin:6px 0 0 0; color:#cbd5e1; font-size: 14px;'>Calibrated Confidence: <b>{probs[pred_class]*100:.1f}%</b> | Algorithmic Uncertainty (Entropy): <b>{uncertainty:.2f} / 1.00</b></p>
+
+# ---------- Header and preset selector ----------
+st.markdown(
+    """
+    <div class="hero">
+      <div class="eyebrow">AI-assisted clinical decision support</div>
+      <h1>Clinical Triage Assistant</h1>
+      <p>Review patient vitals and model-estimated triage risk in one workspace.</p>
     </div>
-    """, unsafe_allow_html=True)
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Low Risk P(Low)", f"{probs[0]*100:.1f}%")
-    m2.metric("Medium Risk P(Med)", f"{probs[1]*100:.1f}%")
-    m3.metric("High Risk P(High)", f"{probs[2]*100:.1f}%")
-    
-    st.markdown("---")
-    st.subheader("📊 Clinical Decision Metrics & Summary")
-    st.info("💡 **Clinical Note:** The model successfully utilizes calibrated random forest ensemble probabilities combined with Shannon entropy uncertainty quantification to stratify emergency intake risk without runtime C-extension bottlenecks.")
+    """,
+    unsafe_allow_html=True,
+)
+
+st.sidebar.title("Demo controls")
+st.sidebar.selectbox(
+    "Load a patient scenario",
+    list(SCENARIOS.keys()),
+    key="preset",
+    on_change=apply_scenario,
+)
+st.sidebar.caption("Selecting a scenario fills the input fields with demo values.")
+
+
+# ---------- Patient intake ----------
+st.subheader("Patient intake")
+left, right = st.columns(2)
+
+with left:
+    age = st.number_input("Age (years)", 18, 95, key="age")
+    gender = st.selectbox("Gender", ["Male", "Female"], key="gender")
+    comorbidity = st.selectbox(
+        "Comorbidity profile",
+        ["None", "Hypertension", "Diabetes", "Cardiovascular", "Asthma"],
+        key="comorbidity",
+    )
+    heart_rate = st.slider("Heart rate (BPM)", 40, 185, key="heart_rate")
+    resp_rate = st.slider("Respiratory rate", 8, 45, key="resp_rate")
+
+with right:
+    systolic_bp = st.slider("Systolic blood pressure (mmHg)", 65, 230, key="systolic_bp")
+    spo2 = st.slider("Blood oxygen SpO₂ (%)", 78, 100, key="spo2")
+    temp_c = st.number_input(
+        "Temperature (°C)", 34.5, 41.5, step=0.1, format="%.1f", key="temp_c"
+    )
+    glucose = st.number_input(
+        "Blood glucose (mg/dL)", 50, 480, key="glucose"
+    )
+    gcs_score = st.selectbox(
+        "GCS mental score", [15, 14, 13, 11, 9, 6, 3], key="gcs_score"
+    )
+    pain_score = st.slider("Pain scale (0–10)", 0, 10, key="pain_score")
+
+
+patient_raw = pd.DataFrame(
+    [
+        {
+            "age": age,
+            "gender": gender,
+            "comorbidity": comorbidity,
+            "heart_rate": heart_rate,
+            "resp_rate": resp_rate,
+            "systolic_bp": systolic_bp,
+            "spo2": spo2,
+            "temp_c": temp_c,
+            "blood_glucose": glucose,
+            "gcs_score": gcs_score,
+            "pain_score": pain_score,
+        }
+    ]
+)
+
+
+# ---------- Prediction ----------
+transformed_data = preprocessor.transform(patient_raw)
+probabilities = model.predict_proba(transformed_data)[0]
+predicted_class = int(np.argmax(probabilities))
+
+tiers = [
+    "LOW RISK",
+    "MEDIUM RISK",
+    "HIGH RISK",
+]
+descriptions = [
+    "Standard outpatient queue",
+    "Urgent review / monitored care",
+    "Immediate clinical review",
+]
+colors = ["#15803d", "#b45309", "#b91c1c"]
+
+uncertainty = (
+    float(entropy(probabilities) / np.log(len(probabilities)))
+    if len(probabilities) > 1
+    else 0.0
+)
+confidence = float(probabilities[predicted_class])
+
+
+# ---------- Results ----------
+st.markdown("---")
+st.subheader("Triage assessment")
+
+result_col, stats_col = st.columns([1.15, 1])
+
+with result_col:
+    st.markdown(
+        f"""
+        <div style="
+            background:#ffffff;
+            border:1px solid #dce6ee;
+            border-left:8px solid {colors[predicted_class]};
+            border-radius:16px;
+            padding:20px 22px;">
+          <div style="color:#52677a;font-size:0.85rem;">MODEL-ESTIMATED TRIAGE</div>
+          <h2 style="color:{colors[predicted_class]};margin:8px 0;">
+            {tiers[predicted_class]}
+          </h2>
+          <div style="color:#334e68;">{descriptions[predicted_class]}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    st.progress(
+        int(round(confidence * 100)),
+        text=f"Model confidence: {confidence * 100:.1f}%",
+    )
+    st.caption(
+        f"Algorithmic uncertainty (normalized entropy): {uncertainty:.2f} / 1.00"
+    )
+
+with stats_col:
+    st.markdown("#### Risk probabilities")
+    probability_table = pd.DataFrame(
+        {"Probability (%)": probabilities * 100},
+        index=["Low risk", "Medium risk", "High risk"],
+    )
+    st.bar_chart(probability_table)
+
+
+# ---------- Patient summary ----------
+st.markdown("---")
+summary_tab, interpretation_tab = st.tabs(["Patient snapshot", "How to interpret"])
+
+with summary_tab:
+    st.markdown("#### Entered vital signs")
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("SpO₂", f"{spo2}%")
+    metric_cols[1].metric("Systolic BP", f"{systolic_bp} mmHg")
+    metric_cols[2].metric("Heart rate", f"{heart_rate} BPM")
+    metric_cols[3].metric("Respiratory rate", f"{resp_rate}/min")
+
+    with st.expander("View all entered patient details"):
+        st.dataframe(
+            patient_raw.T.rename(columns={0: "Entered value"}),
+            use_container_width=True,
+        )
+
+with interpretation_tab:
+    st.markdown("#### What these numbers mean")
+    st.write(
+        "The probability chart shows the model's estimated scores for each "
+        "triage class. Confidence and uncertainty describe model output; "
+        "they are not a guarantee of clinical correctness."
+    )
+    st.info(
+        "This prototype supports clinical review. It is not a diagnosis and "
+        "does not replace a qualified clinician's judgment."
+    )
+    st.caption(
+        "SHAP feature-level explanations are not displayed in this dashboard yet."
+    )
