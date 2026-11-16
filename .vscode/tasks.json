@@ -6,19 +6,19 @@
       "label": "Set up TriageCare",
       "detail": "Create .venv, install packages, create the database, train the model, add demo data",
       "type": "shell",
-      "command": "PY=$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3.10 || command -v python3); $PY -c 'import sys; assert sys.version_info >= (3, 10), \"Python 3.10+ needed, found \" + sys.version.split()[0] + \". Install it from python.org\"' && $PY -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m triagecare.cli setup",
+      "command": "PY=$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3.10 || command -v python3); $PY -c 'import sys; assert sys.version_info >= (3, 10), \"Python 3.10+ needed, found \" + sys.version.split()[0] + \". Install it from python.org\"' && $PY -m venv .venv && .venv/bin/python -m pip install -r requirements-dev.txt && .venv/bin/python -m triagecare.cli setup",
       "windows": {
-        "command": "py -m venv .venv; .venv\\Scripts\\pip install -r requirements-dev.txt; .venv\\Scripts\\python -m triagecare.cli setup"
+        "command": "py -3 -m venv .venv; if ($?) { .venv\\Scripts\\python -m pip install -r requirements-dev.txt }; if ($?) { .venv\\Scripts\\python -m triagecare.cli setup }"
       },
       "problemMatcher": [],
       "presentation": { "panel": "dedicated", "clear": true }
     },
     {
       "label": "Run TriageCare",
-      "detail": "Start the website at http://localhost:8000 (reloads when you save a file)",
+      "detail": "Start the website and open it in the browser (runs setup if needed, reloads when you save a file)",
       "type": "shell",
-      "command": ".venv/bin/uvicorn triagecare.main:app --reload --port 8000",
-      "windows": { "command": ".venv\\Scripts\\uvicorn triagecare.main:app --reload --port 8000" },
+      "command": "if [ ! -x .venv/bin/python ]; then echo 'No .venv yet: run the \"Set up TriageCare\" task first.'; exit 1; fi; .venv/bin/python scripts/run.py",
+      "windows": { "command": "if (!(Test-Path .venv\\Scripts\\python.exe)) { Write-Host 'No .venv yet: run the \"Set up TriageCare\" task first.'; exit 1 }; .venv\\Scripts\\python scripts\\run.py" },
       "isBackground": true,
       "problemMatcher": [],
       "group": { "kind": "build", "isDefault": true },
