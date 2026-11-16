@@ -79,7 +79,7 @@ def main() -> None:
         threading.Thread(target=open_when_ready, args=(port,), daemon=True).start()
     try:
         subprocess.run(
-            [sys.executable, "-m", "uvicorn", "triagecare.main:app", "--reload", "--host", HOST, "--port", str(port)],
+            [sys.executable, "-m", "uvicorn", "triagecare.main:app", "--reload", "--reload-dir", "triagecare", "--reload-dir", "src", "--host", HOST, "--port", str(port)],
             cwd=ROOT,
         )
     except KeyboardInterrupt:
