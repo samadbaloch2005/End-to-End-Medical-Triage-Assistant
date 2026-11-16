@@ -75,6 +75,8 @@ Open <http://localhost:8000> and sign in with one of the demo accounts. They're 
 | `dr.hamid` | Doctor, Emergency Medicine | `triage123` |
 | `dr.usman` | Doctor, Cardiology | `triage123` |
 
+Shortcut after the first setup: `python scripts/run.py` (Windows: `.venv\Scripts\python scripts\run.py`, macOS: `.venv/bin/python scripts/run.py`). It runs `setup` if the model or database is missing, picks a free port if 8000 is taken, and opens the browser. In VS Code the same thing is **Terminal → Run Task → Run TriageCare**.
+
 `setup` is safe to run again. It won't re-seed a database that already has users. To start fresh, delete `triagecare.db` and run it again.
 
 ### Useful commands
