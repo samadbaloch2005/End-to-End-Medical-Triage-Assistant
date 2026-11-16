@@ -12,6 +12,9 @@ sqlalchemy>=2.0.30
 alembic>=1.13
 psycopg[binary]>=3.1   # PostgreSQL driver (Neon, Render, docker compose)
 
+# Windows has no built-in time-zone database (needed for Asia/Karachi)
+tzdata>=2024.1; sys_platform == "win32"
+
 # Machine learning
 numpy>=1.26
 pandas>=2.1
