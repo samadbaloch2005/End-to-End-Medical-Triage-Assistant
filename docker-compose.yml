@@ -1,0 +1,34 @@
+# Full stack on your machine: the app plus a PostgreSQL database.
+#   docker compose up --build
+# Then open http://localhost:8000
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: triagecare
+      POSTGRES_PASSWORD: triagecare
+      POSTGRES_DB: triagecare
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U triagecare"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://triagecare:triagecare@db:5432/triagecare
+      SECRET_KEY: local-docker-secret-change-me
+      SEED_DEMO: "true"
+      DEMO_MODE: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

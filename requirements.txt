@@ -1,10 +1,19 @@
-numpy
-pandas
-scikit-learn
-xgboost
-imbalanced-learn
-shap
-streamlit
-matplotlib
-seaborn
-joblib
+# Web app
+fastapi>=0.115
+uvicorn[standard]>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9
+itsdangerous>=2.1
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# Database
+sqlalchemy>=2.0.30
+alembic>=1.13
+
+# Machine learning
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+imbalanced-learn>=0.12
+joblib>=1.3

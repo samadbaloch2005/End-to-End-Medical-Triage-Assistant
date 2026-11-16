@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Patients{% endblock %}
+{% block actions %}
+{% if user.role in ("receptionist", "nurse", "admin") %}
+<a class="btn" href="/patients/new">{{ icon("plus") }} Register patient</a>
+<a class="btn btn-primary" href="/visits/new">{{ icon("plus") }} New arrival</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-head">
+    <div class="input-unit" style="flex:1;max-width:420px">
+      <input class="input" type="search" name="q" value="{{ q }}" data-search
+             placeholder="Search by name, MR number, phone or CNIC"
+             hx-get="/patients" hx-trigger="input changed delay:250ms, search"
+             hx-target="#patient-results" hx-push-url="true" hx-indicator="#search-spin" autocomplete="off">
+      <span id="search-spin" class="htmx-indicator"><span class="spinner"></span></span>
+    </div>
+    <span class="meta">Press <kbd>/</kbd> to search</span>
+  </div>
+  <div id="patient-results">
+    {% include "patients/_results.html" %}
+  </div>
+</div>
+{% endblock %}

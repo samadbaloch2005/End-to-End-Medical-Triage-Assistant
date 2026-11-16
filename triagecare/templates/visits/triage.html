@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, csrf_input %}
+{% block title %}Triage{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/queue">Queue</a> / <a href="/visits/{{ visit.id }}">{{ visit.patient.full_name }}</a></div>{% endblock %}
+{% block actions %}{% endblock %}
+
+{% block content %}
+{% set p = visit.patient %}
+<div class="grid grid-main" style="grid-template-columns:minmax(0,1fr) 380px">
+  {# The form posts normally to save. HTMX only listens for typing, to refresh the preview. #}
+  <form method="post" action="/visits/{{ visit.id }}/triage" id="triage-form" class="card" novalidate
+        hx-post="/visits/{{ visit.id }}/triage/preview"
+        hx-trigger="input changed delay:500ms, load"
+        hx-target="#preview" hx-swap="innerHTML" hx-sync="this:replace">
+    {{ csrf_input(csrf) }}
+    <div class="card-head">
+      <span class="avatar">{{ p.first_name[0] }}{{ p.last_name[0] }}</span>
+      <div>
+        <b>{{ p.full_name }}</b>
+        <div class="sub">{{ p.age }} y &middot; {{ p.gender }} &middot; {{ p.comorbidity if p.comorbidity != "None" else "no comorbidity" }}{% if visit.arrival_mode == "ambulance" %} &middot; <span class="text-high">ambulance</span>{% endif %}</div>
+      </div>
+      <div class="actions sub" style="max-width:45%;text-align:right">"{{ visit.chief_complaint }}"</div>
+    </div>
+    {% if p.allergies %}<div class="card-body" style="padding-bottom:0"><div class="flash flash-error">Allergy: {{ p.allergies }}</div></div>{% endif %}
+
+    <div class="card-body">
+      <h3 class="mb-2">Vital signs</h3>
+      <div class="vitals-grid">
+        {{ field("heart_rate", "Heart rate", values, errors, type="number", unit="bpm", required=True, attrs='inputmode="numeric" min="20" max="250" autofocus') }}
+        {{ field("resp_rate", "Respiratory rate", values, errors, type="number", unit="/min", required=True, attrs='inputmode="numeric" min="4" max="60"') }}
+        {{ field("spo2", "SpO₂", values, errors, type="number", unit="%", required=True, attrs='inputmode="decimal" min="50" max="100" step="0.1"') }}
+        {{ field("systolic_bp", "Systolic BP", values, errors, type="number", unit="mmHg", attrs='inputmode="numeric" min="40" max="280"') }}
+        {{ field("diastolic_bp", "Diastolic BP", values, errors, type="number", unit="mmHg", attrs='inputmode="numeric" min="20" max="180"') }}
+        {{ field("temp_c", "Temperature", values, errors, type="number", unit="°C", required=True, attrs='inputmode="decimal" min="30" max="44" step="0.1"') }}
+        {{ field("blood_glucose", "Blood glucose", values, errors, type="number", unit="mg/dL", hint="if taken", attrs='inputmode="numeric" min="15" max="800"') }}
+        <div class="field {% if errors.gcs_score %}has-error{% endif %}">
+          <label for="f-gcs_score">GCS <span class="hint">3 to 15</span></label>
+          <select class="input" id="f-gcs_score" name="gcs_score">
+            {% for g in range(15, 2, -1) %}
+            <option value="{{ g }}" {% if (values.get("gcs_score") or 15)|int == g %}selected{% endif %}>{{ g }}{% if g == 15 %} (fully alert){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-pain_score">Pain <span class="hint" id="pain-out">{{ values.get("pain_score") or 0 }}/10</span></label>
+          <input id="f-pain_score" name="pain_score" type="range" min="0" max="10" step="1"
+                 value="{{ values.get('pain_score') or 0 }}" style="width:100%;margin-top:9px"
+                 oninput="document.getElementById('pain-out').textContent = this.value + '/10'">
+        </div>
+      </div>
+      <div class="field mt-2">
+        <label for="f-notes">Triage notes <span class="hint">optional</span></label>
+        <textarea class="input" id="f-notes" name="notes" placeholder="Observations, history, anything the doctor should know">{{ values.get("notes") or "" }}</textarea>
+      </div>
+    </div>
+    <div class="card-foot">
+      <div class="form-actions" style="margin:0">
+        <a class="btn btn-ghost" href="/visits/{{ visit.id }}">Cancel</a>
+        <button class="btn btn-primary" type="submit">Save triage and send to queue</button>
+      </div>
+    </div>
+  </form>
+
+  <aside class="card" style="position:sticky;top:16px">
+    <div class="card-head"><h2>Risk assessment</h2><span class="meta">updates as you type</span></div>
+    <div id="preview" class="card-body">
+      <div class="empty" style="padding:12px 0">Enter heart rate, respiratory rate, SpO&#8322; and temperature to see the risk.</div>
+    </div>
+  </aside>
+</div>
+{% endblock %}

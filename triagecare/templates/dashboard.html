@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tier_badge, status_badge %}
+{% block title %}Overview{% endblock %}
+{% block crumbs %}<div class="crumbs">{{ now_label }}</div>{% endblock %}
+{% block heading %}Good {{ greeting }}, {{ user.full_name.split()[0] }}{% endblock %}
+{% block head %}<script src="/static/vendor/chart.min.js" defer></script>{% endblock %}
+
+{% block content %}
+<div class="grid grid-4">
+  <div class="card stat">
+    <div class="stat-label">In the department</div>
+    <div class="stat-value">{{ stats.in_department }}</div>
+    <div class="stat-note">{{ stats.arrivals_today }} arrivals today, {{ stats.completed_today }} discharged</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Awaiting triage</div>
+    <div class="stat-value">{{ stats.awaiting_triage }}</div>
+    <div class="stat-note">{% if stats.awaiting_triage %}<a href="/queue">Open the queue</a>{% else %}Nobody waiting{% endif %}</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Waiting for a doctor</div>
+    <div class="stat-value">{{ stats.waiting_for_doctor }}</div>
+    <div class="stat-note {% if stats.overdue %}warn{% endif %}">
+      {% if stats.overdue %}{{ stats.overdue }} past target time{% else %}All within target{% endif %}
+    </div>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Average wait to be seen</div>
+    <div class="stat-value">{{ stats.avg_wait|minutes if stats.avg_wait is not none else "—" }}</div>
+    <div class="stat-note">Arrival to doctor, today</div>
+  </div>
+</div>
+
+{% if my_queue is not none %}
+<div class="card mt-3">
+  <div class="card-head">
+    <h2>Your patients</h2>
+    <span class="meta">{{ my_queue.triaged|length }} waiting, {{ my_queue.treating|length }} in treatment</span>
+    <div class="actions"><a class="btn btn-sm" href="/queue?mine=1">Open my queue</a></div>
+  </div>
+  {% set mine = my_queue.triaged + my_queue.treating %}
+  {% if mine %}
+  <table class="table">
+    <tbody>
+    {% for e in mine[:6] %}
+      <tr>
+        <td style="width:110px">{{ tier_badge(e.visit.tier, short=True) }}</td>
+        <td><a class="row-link" href="/visits/{{ e.visit.id }}">{{ e.visit.patient.full_name }}</a>
+            <div class="sub">{{ e.visit.chief_complaint }}</div></td>
+        <td>{{ e.visit.ward.name if e.visit.ward else "—" }}</td>
+        <td>{{ status_badge(e.visit.status) }}</td>
+        <td class="num"><span class="q-wait {% if e.overdue %}over{% endif %}">{{ e.waited|minutes }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><strong>No patients assigned to you</strong>New patients are routed to on-duty doctors by specialty and workload.</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="grid grid-main mt-3">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head">
+        <h2>Next to be seen</h2>
+        <span class="meta">Highest risk first, then longest wait</span>
+        <div class="actions"><a class="btn btn-sm" href="/queue">Full queue</a></div>
+      </div>
+      {% if queue.triaged %}
+      <table class="table">
+        <thead><tr><th>Priority</th><th>Patient</th><th>Ward</th><th>Doctor</th><th class="num">Waiting</th></tr></thead>
+        <tbody>
+        {% for e in queue.triaged[:7] %}
+          <tr>
+            <td>{{ tier_badge(e.visit.tier, short=True) }}</td>
+            <td><a class="row-link" href="/visits/{{ e.visit.id }}">{{ e.visit.patient.full_name }}</a>
+              <div class="sub">{{ e.visit.patient.age }}{{ e.visit.patient.gender[0] }} &middot; {{ e.visit.chief_complaint }}</div></td>
+            <td>{{ e.visit.ward.name if e.visit.ward else "—" }}</td>
+            <td>{{ e.visit.doctor.display_name if e.visit.doctor else "Unassigned" }}</td>
+            <td class="num nowrap">
+              <span class="q-wait {% if e.overdue %}over{% endif %}">{{ e.waited|minutes }}</span>
+              <div class="sub">target {{ e.target }} min</div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty"><strong>Queue is clear</strong>Triaged patients will appear here.</div>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="card-head"><h2>Arrivals by hour</h2><span class="meta">Today</span></div>
+        <div class="card-body" style="height:200px">
+          <canvas data-chart="hourly" data-values='{{ stats.hourly|tojson }}' aria-label="Arrivals per hour today"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Today by risk</h2></div>
+        <div class="card-body">
+          {% set total = (stats.by_tier.values()|sum) or 1 %}
+          <div class="probs">
+            {% for t in ["high", "medium", "low"] %}
+            <div class="prob" style="grid-template-columns:70px 1fr 30px">
+              <span>{{ t|title }}</span>
+              <div class="track"><div class="fill {{ t }}" style="width:{{ (stats.by_tier[t] / total * 100)|round }}%"></div></div>
+              <span class="v">{{ stats.by_tier[t] }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          <hr>
+          <div class="flex between small">
+            <span class="muted">Appointments today</span>
+            <span><b>{{ stats.appointments_today }}</b> <span class="muted">({{ stats.appointments_pending }} still to arrive)</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Beds</h2><div class="actions"><a class="btn btn-sm btn-ghost" href="/wards">Details</a></div></div>
+      <div class="card-body" style="display:grid;gap:14px">
+        {% for w in wards %}
+        <div>
+          <div class="flex between small mb-1">
+            <span style="font-weight:550">{{ w.ward.name }}</span>
+            <span class="muted">{{ w.occupied }}/{{ w.ward.capacity }}</span>
+          </div>
+          <div class="bar {{ 'full' if w.percent >= 100 else ('busy' if w.percent >= 75 else '') }}"><span style="width:{{ w.percent }}%"></span></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Appointments</h2><div class="actions"><a class="btn btn-sm btn-ghost" href="/appointments">All</a></div></div>
+      {% if appointments %}
+      <table class="table"><tbody>
+        {% for a in appointments %}
+        <tr>
+          <td class="nowrap" style="width:60px"><b>{{ a.scheduled_at|time }}</b></td>
+          <td><a class="row-link" href="/patients/{{ a.patient.id }}">{{ a.patient.full_name }}</a><div class="sub">{{ a.reason }}</div></td>
+          <td class="right">{{ status_badge(a.status) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+      {% else %}
+      <div class="empty">No appointments today.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Recent activity</h2></div>
+      <div class="card-body">
+        {% if recent %}
+        <ul class="timeline">
+          {% for e in recent %}
+          <li class="k-{{ e.kind }}">
+            <div><a href="/visits/{{ e.visit_id }}">{{ e.message }}</a></div>
+            <div class="when">{{ e.created_at|ago }}{% if e.user %} &middot; {{ e.user.display_name }}{% endif %}</div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}<div class="muted">Nothing yet today.</div>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
