@@ -1,60 +1,55 @@
-"""Build a TreeSHAP explainer artifact for the trained triage model."""
+"""Per-patient explanations for the triage model.
 
-from pathlib import Path
+The served model is a calibrated pipeline (preprocessing, SMOTE, classifier and
+Platt scaling), so tree-specific tools like TreeSHAP can't be applied to it
+directly. We use a small model-agnostic method instead, measured against a
+healthy reference patient:
+
+    remove: start from the patient and reset one feature to the reference value
+    add:    start from the reference and give it the patient's value for one feature
+
+Each feature's contribution is the average of the two effects. Looking only at
+"remove" under-credits features when a patient is already clearly critical
+(one bad vital is enough, so removing any single one changes little); "add"
+has the opposite bias. Averaging both is a cheap approximation of Shapley values.
+
+Effects are measured on expected risk, P(Medium) * 1 + P(High) * 2, a number
+from 0 to 2. Positive means "this value pushes the patient to a higher tier".
+It needs 2 extra predictions per feature, which is fast enough to run on every
+triage, and it explains the exact model that made the decision.
+"""
 from typing import Any
 
-import joblib
-import shap
-from sklearn.ensemble import RandomForestClassifier
+import numpy as np
+import pandas as pd
 
-MODEL_PATH = Path("models/base_rf_model.pkl")
-FEATURE_NAMES_PATH = Path("models/feature_names.pkl")
-EXPLAINER_PATH = Path("models/explainer.pkl")
+from src.preprocess import FEATURES
 
 
-def generate_explainer(
-    model_path: Path = MODEL_PATH,
-    feature_names_path: Path = FEATURE_NAMES_PATH,
-    output_path: Path = EXPLAINER_PATH,
-) -> Any:
-    """Create and save TreeSHAP for the trained Random Forest model."""
-    model_path = Path(model_path)
-    feature_names_path = Path(feature_names_path)
-    output_path = Path(output_path)
+def expected_risk(proba: np.ndarray) -> np.ndarray:
+    return proba[:, 1] * 1.0 + proba[:, 2] * 2.0
 
-    if not model_path.is_file():
-        raise FileNotFoundError(
-            f"Trained model not found: {model_path}. Run `python -m src.train` first."
+
+def explain(model: Any, patient: dict, reference: dict) -> list[dict]:
+    """Return feature contributions sorted by absolute impact, largest first."""
+    base_row = {f: patient.get(f) for f in FEATURES}
+    ref_row = {f: reference[f] for f in FEATURES}
+    rows = [base_row, ref_row]
+    for feature in FEATURES:
+        rows.append({**base_row, feature: ref_row[feature]})
+        rows.append({**ref_row, feature: base_row[feature]})
+
+    risk = expected_risk(model.predict_proba(pd.DataFrame(rows, columns=FEATURES)))
+    actual, reference_risk = risk[0], risk[1]
+
+    contributions = []
+    for i, feature in enumerate(FEATURES):
+        if base_row[feature] is None:
+            continue
+        removed = actual - risk[2 + 2 * i]
+        added = risk[3 + 2 * i] - reference_risk
+        contributions.append(
+            {"feature": feature, "value": base_row[feature], "impact": float((removed + added) / 2)}
         )
-    if not feature_names_path.is_file():
-        raise FileNotFoundError(
-            f"Feature names not found: {feature_names_path}. Run `python -m src.train` first."
-        )
-
-    model = joblib.load(model_path)
-    if not isinstance(model, RandomForestClassifier):
-        raise TypeError(
-            f"TreeSHAP expects a RandomForestClassifier, but {model_path} contains "
-            f"{type(model).__name__}. The training script saves its best-scoring "
-            "candidate under this filename; verify Random Forest was selected."
-        )
-
-    feature_names = joblib.load(feature_names_path)
-    expected_count = getattr(model, "n_features_in_", None)
-    if expected_count is not None and len(feature_names) != expected_count:
-        raise ValueError(
-            f"Feature mismatch: artifact has {len(feature_names)} names, but the "
-            f"model expects {expected_count}. Retrain and regenerate the artifacts."
-        )
-
-    print("Generating SHAP TreeExplainer for the Random Forest triage model...")
-    explainer = shap.TreeExplainer(model, feature_names=list(feature_names))
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(explainer, output_path)
-    print(f"SUCCESS: SHAP TreeExplainer saved to {output_path}")
-    return explainer
-
-
-if __name__ == "__main__":
-    generate_explainer()
+    contributions.sort(key=lambda c: abs(c["impact"]), reverse=True)
+    return contributions

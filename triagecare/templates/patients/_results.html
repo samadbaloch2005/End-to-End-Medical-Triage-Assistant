@@ -1,0 +1,44 @@
+{% if patients %}
+<table class="table">
+  <thead>
+    <tr><th>Patient</th><th>MR number</th><th>Age / sex</th><th>Phone</th><th>Comorbidity</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for p in patients %}
+    <tr>
+      <td><a class="row-link" href="/patients/{{ p.id }}">{{ p.full_name }}</a>
+        {% if p.allergies %}<div class="sub text-high">Allergy: {{ p.allergies }}</div>{% endif %}</td>
+      <td class="mono">{{ p.mrn }}</td>
+      <td>{{ p.age }} &middot; {{ p.gender }}</td>
+      <td class="nowrap">{{ p.phone or "—" }}</td>
+      <td>{{ p.comorbidity if p.comorbidity != "None" else "—" }}</td>
+      <td class="right nowrap">
+        {% if pick == "visit" %}
+          <a class="btn btn-sm btn-primary" href="/visits/new?patient_id={{ p.id }}">Select</a>
+        {% elif pick == "appointment" %}
+          <a class="btn btn-sm btn-primary" href="/appointments/new?patient_id={{ p.id }}">Select</a>
+        {% else %}
+          <a class="btn btn-sm btn-ghost" href="/patients/{{ p.id }}">Open</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if not pick and pages > 1 %}
+<div class="card-foot flex between">
+  <span class="muted small">{{ total }} patients &middot; page {{ page }} of {{ pages }}</span>
+  <div class="flex">
+    {% if page > 1 %}<a class="btn btn-sm" href="/patients?q={{ q|urlencode }}&page={{ page - 1 }}">Previous</a>{% endif %}
+    {% if page < pages %}<a class="btn btn-sm" href="/patients?q={{ q|urlencode }}&page={{ page + 1 }}">Next</a>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% else %}
+<div class="empty">
+  <strong>{% if q %}No patients match "{{ q }}"{% else %}No patients yet{% endif %}</strong>
+  {% if user.role in ("receptionist", "nurse", "admin") %}
+  <a href="/patients/new{% if pick %}?then={{ pick }}{% endif %}">Register a new patient</a>
+  {% endif %}
+</div>
+{% endif %}

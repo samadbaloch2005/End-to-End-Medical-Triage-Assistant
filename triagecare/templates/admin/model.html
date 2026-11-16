@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Triage model{% endblock %}
+{% block head %}{% if card %}<script src="/static/vendor/chart.min.js" defer></script>{% endif %}{% endblock %}
+{% block actions %}{% endblock %}
+
+{% block content %}
+{% if not card %}
+<div class="card"><div class="empty">
+  <strong>No trained model</strong>
+  Run <code>python -m triagecare.cli train</code> from the project folder, then reload this page.
+</div></div>
+{% else %}
+{% set m = card.test_metrics %}
+{% set m0 = card.test_metrics_argmax %}
+<div class="grid grid-4">
+  <div class="card stat"><div class="stat-label">Model in use</div><div class="stat-value" style="font-size:19px">{{ card.model_name }}</div><div class="stat-note">version {{ card.version }}</div></div>
+  <div class="card stat"><div class="stat-label">ROC-AUC (hold-out)</div><div class="stat-value">{{ "%.3f"|format(m.roc_auc_ovr) }}</div><div class="stat-note">one-vs-rest, 3 classes</div></div>
+  <div class="card stat"><div class="stat-label">High-risk recall</div><div class="stat-value">{{ m.high_risk_recall|pct }}</div><div class="stat-note">{{ m0.high_risk_recall|pct }} without the safety threshold</div></div>
+  <div class="card stat"><div class="stat-label">Macro F1</div><div class="stat-value">{{ "%.3f"|format(m.f1_macro) }}</div><div class="stat-note">Brier score {{ "%.3f"|format(m.brier) }}</div></div>
+</div>
+
+<div class="grid grid-2 mt-3">
+  <div class="card">
+    <div class="card-head"><h2>Candidate comparison</h2><span class="meta">5-fold cross-validation on the training set</span></div>
+    <div class="card-body" style="height:220px">
+      <canvas data-chart="leaderboard" data-values='{{ card.leaderboard|tojson }}' aria-label="Cross-validated ROC-AUC by model"></canvas>
+    </div>
+    <table class="table">
+      <thead><tr><th>Model</th><th class="num">ROC-AUC</th><th class="num">Macro F1</th><th class="num">Accuracy</th></tr></thead>
+      <tbody>
+      {% for r in card.leaderboard %}
+      <tr>
+        <td>{{ r.name }}{% if loop.first %} <span class="badge tier-low plain">selected</span>{% endif %}</td>
+        <td class="num">{{ "%.3f"|format(r.cv_roc_auc) }} <span class="sub">&plusmn;{{ "%.3f"|format(r.cv_roc_auc_std) }}</span></td>
+        <td class="num">{{ "%.3f"|format(r.cv_f1_macro) }}</td>
+        <td class="num">{{ "%.3f"|format(r.cv_accuracy) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Confusion matrix</h2><span class="meta">hold-out set, {{ m.per_class.values()|map(attribute="support")|sum|int }} patients</span></div>
+    <div class="card-body">
+      {% set cm = m.confusion_matrix %}
+      {% set peak = cm|map("max")|max %}
+      <table class="cm">
+        <tr><th></th><th colspan="3">Predicted</th></tr>
+        <tr><th>Actual</th>{% for c in card.class_names %}<th>{{ c }}</th>{% endfor %}</tr>
+        {% for row in cm %}
+        <tr>
+          <th style="text-align:right">{{ card.class_names[loop.index0] }}</th>
+          {% set r = loop.index0 %}
+          {% for v in row %}
+          {% set alpha = (v / peak * 0.85 + 0.06)|round(2) %}
+          <td style="background:rgba({{ '29,79,145' if r == loop.index0 else '180,35,24' }},{{ alpha }});color:{{ '#fff' if alpha > 0.45 else 'var(--ink)' }}">{{ v }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+      <p class="small muted mt-2">Blue is correct. Red below the diagonal means a patient was under-triaged, which is the mistake the High threshold is there to reduce.</p>
+
+      <table class="table mt-2">
+        <thead><tr><th>Class</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr></thead>
+        <tbody>
+        {% for name, s in m.per_class.items() %}
+        <tr><td>{{ name }}</td><td class="num">{{ "%.2f"|format(s.precision) }}</td><td class="num">{{ "%.2f"|format(s.recall) }}</td><td class="num">{{ "%.2f"|format(s["f1-score"]) }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-2 mt-3">
+  <div class="card">
+    <div class="card-head"><h2>How a tier is decided</h2></div>
+    <div class="card-body small">
+      <ol style="margin:0;padding-left:18px;display:grid;gap:8px">
+        <li>Raw vitals go through one saved pipeline: median imputation, scaling and one-hot encoding, then the {{ card.model_name }}. SMOTE balances classes during training only.</li>
+        <li>Probabilities are calibrated with Platt scaling on non-oversampled folds, so 30% means roughly 30%.</li>
+        <li>If P(High) is at least <b>{{ card.high_threshold }}</b> the patient is High. The threshold was picked on out-of-fold training predictions to reach {{ card.target_high_recall|pct }} High recall.</li>
+        <li>Clinical safety rules (low SpO&#8322;, hypotension, GCS 8 or less and so on) can raise the tier but never lower it.</li>
+        <li>A nurse or doctor can override the result. Every override and its reason is stored.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>In use</h2><span class="meta">from this database</span></div>
+    <div class="card-body">
+      <dl class="kv" style="grid-template-columns:190px 1fr">
+        <dt>Assessments made</dt><dd>{{ live.assessments }}</dd>
+        <dt>Raised by safety rules</dt><dd>{{ live.raised_by_rules }}</dd>
+        <dt>Overridden by clinicians</dt><dd>{{ live.overridden }} ({{ live.override_rate|pct }})</dd>
+        <dt>Training rows</dt><dd>{{ card.dataset.rows }} <span class="muted">({% for k, v in card.dataset.class_balance.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% endfor %})</span></dd>
+        <dt>Trained</dt><dd>{{ card.trained_at.replace("T", " ")[:16] }} UTC, scikit-learn {{ card.sklearn_version }}</dd>
+      </dl>
+      <p class="small muted mt-2 mb-0">The training data is synthetic. This system is a teaching project and must not be used for real patients.</p>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

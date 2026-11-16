@@ -1,0 +1,17 @@
+{% if model_error %}
+<div class="flash flash-error">{{ model_error }}</div>
+{% elif incomplete %}
+<div class="empty" style="padding:12px 0">
+  {% set missing = errors|length %}
+  Waiting for {{ missing }} more value{{ "s" if missing != 1 }}:
+  <div class="sub mt-1">{{ errors.keys()|map("feature")|join(", ") }}</div>
+</div>
+{% else %}
+{% with tier=r.final_tier.value, model_tier=r.model_tier.value, probs=r.probabilities,
+        flags=r.flags, drivers=r.drivers,
+        ward_name=r.ward.name if r.ward else None, ward_note=r.ward_note,
+        doctor_name=r.doctor.display_name if r.doctor else None, specialty=r.specialty %}
+  {% include "visits/_result.html" %}
+{% endwith %}
+<p class="small muted mt-2 mb-0">Preview only. Nothing is saved until you press Save.</p>
+{% endif %}

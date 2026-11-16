@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ "My patients" if mine else "Department queue" }}{% endblock %}
+{% block crumbs %}<div class="crumbs"><span class="live-dot"></span>Live, refreshes every 15 seconds</div>{% endblock %}
+
+{% block content %}
+{% if user.role == "doctor" %}
+<div class="pills mb-2">
+  <a href="/queue" class="{{ '' if mine else 'active' }}">Whole department</a>
+  <a href="/queue?mine=1" class="{{ 'active' if mine else '' }}">Assigned to me</a>
+</div>
+{% endif %}
+
+<div id="queue-board"
+     hx-get="/queue{{ '?mine=1' if mine else '' }}"
+     hx-trigger="every 15s [document.visibilityState === 'visible']"
+     hx-target="#queue-board"
+     hx-swap="innerHTML">
+  {% include "queue/_board.html" %}
+</div>
+{% endblock %}
