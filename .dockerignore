@@ -7,5 +7,3 @@ __pycache__
 .env
 *.db
 models/*.joblib
-models/*.pkl
-app/
