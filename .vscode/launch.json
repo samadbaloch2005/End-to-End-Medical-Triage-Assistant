@@ -1,0 +1,22 @@
+{
+  // Run and Debug panel: start the app with breakpoints (needs the Python extension).
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TriageCare (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["triagecare.main:app", "--reload", "--port", "8000"],
+      "jinja": true,
+      "justMyCode": true
+    },
+    {
+      "name": "Tests (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q"]
+    }
+  ]
+}

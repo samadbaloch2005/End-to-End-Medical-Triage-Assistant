@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tier_badge, status_badge, csrf_input %}
+{% block title %}{{ visit.patient.full_name }}{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/queue">Queue</a> / Visit #{{ visit.id }}</div>{% endblock %}
+{% set p = visit.patient %}
+{% set clinician = user.role in ("nurse", "doctor", "admin") %}
+{% set is_doctor = user.role in ("doctor", "admin") %}
+{% block actions %}
+{% if visit.is_active %}
+  {% if clinician %}
+  <a class="btn" href="/visits/{{ visit.id }}/triage">{{ "Re-triage" if a else "Triage now" }}</a>
+  {% endif %}
+  {% if is_doctor and visit.status == "triaged" %}
+  <form method="post" action="/visits/{{ visit.id }}/start" class="inline">
+    {{ csrf_input(csrf) }}<button class="btn btn-primary">Start treatment</button>
+  </form>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-2">
+  <div class="card-body flex wrap" style="gap:14px">
+    <div class="patient-head">
+      <span class="avatar">{{ p.first_name[0] }}{{ p.last_name[0] }}</span>
+      <div>
+        <h2 style="font-size:17px"><a href="/patients/{{ p.id }}" style="color:inherit">{{ p.full_name }}</a></h2>
+        <div class="facts">
+          <span>{{ p.age }} y, {{ p.gender }}</span>
+          <span class="mono">{{ p.mrn }}</span>
+          {% if p.comorbidity != "None" %}<span>{{ p.comorbidity }}</span>{% endif %}
+          {% if p.allergies %}<span class="text-high">Allergy: {{ p.allergies }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <div style="margin-left:auto" class="flex wrap">
+      {{ tier_badge(visit.tier) }} {{ status_badge(visit.status) }}
+    </div>
+  </div>
+  <div class="vital-tiles" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+    <div><div class="l">Complaint</div><div>{{ visit.chief_complaint }}</div></div>
+    <div><div class="l">Arrived</div><div>{{ visit.arrived_at|time }} &middot; {{ "Ambulance" if visit.arrival_mode == "ambulance" else visit.arrival_mode|label }}</div></div>
+    <div><div class="l">Ward</div><div>{{ visit.ward.name if visit.ward else "Not assigned" }}</div></div>
+    <div><div class="l">Doctor</div><div>{{ visit.doctor.display_name if visit.doctor else "Not assigned" }}</div></div>
+  </div>
+</div>
+
+<div class="grid grid-main">
+  <div class="stack">
+    {% if a %}
+    {% set flagged = {} %}
+    {% for f in a.red_flags %}{% set _ = flagged.update({f.vital: f.level}) %}{% endfor %}
+    <div class="card">
+      <div class="card-head">
+        <h2>Latest vitals</h2>
+        <span class="meta">{{ a.created_at|datetime }}{% if a.nurse %} by {{ a.nurse.display_name }}{% endif %}</span>
+      </div>
+      <div class="vital-tiles">
+        {% for key, label, unit in [("heart_rate","Heart rate","bpm"),("resp_rate","Resp. rate","/min"),("spo2","SpO₂","%"),("temp_c","Temperature","°C")] %}
+        <div><div class="l">{{ label }}</div><div class="v {% if flagged.get(key) %}abn-{{ flagged[key] }}{% endif %}">{{ "%g"|format(a[key]) }} <small>{{ unit }}</small></div></div>
+        {% endfor %}
+        <div><div class="l">Blood pressure</div><div class="v {% if flagged.get('systolic_bp') %}abn-{{ flagged['systolic_bp'] }}{% endif %}">
+          {% if a.systolic_bp %}{{ "%g"|format(a.systolic_bp) }}{% if a.diastolic_bp %}/{{ "%g"|format(a.diastolic_bp) }}{% endif %} <small>mmHg</small>{% else %}&mdash;{% endif %}</div></div>
+        <div><div class="l">Glucose</div><div class="v {% if flagged.get('blood_glucose') %}abn-{{ flagged['blood_glucose'] }}{% endif %}">
+          {% if a.blood_glucose %}{{ "%g"|format(a.blood_glucose) }} <small>mg/dL</small>{% else %}&mdash;{% endif %}</div></div>
+        <div><div class="l">GCS</div><div class="v {% if flagged.get('gcs_score') %}abn-{{ flagged['gcs_score'] }}{% endif %}">{{ a.gcs_score }} <small>/15</small></div></div>
+        <div><div class="l">Pain</div><div class="v {% if flagged.get('pain_score') %}abn-{{ flagged['pain_score'] }}{% endif %}">{{ a.pain_score }} <small>/10</small></div></div>
+      </div>
+      {% if a.notes %}<div class="card-body" style="border-top:1px solid var(--line)"><div class="muted small mb-1">Triage notes</div><div style="white-space:pre-line">{{ a.notes }}</div></div>{% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Triage decision</h2><span class="meta">{{ a.model_version }}</span></div>
+      <div class="card-body">
+        {% if a.override_tier %}
+        <div class="flash mb-2" style="background:var(--medium-soft);border-color:#f1d9ad;color:#7a4505">
+          Priority changed to {{ a.override_tier|title }} by {{ a.overridden_by.display_name if a.overridden_by else "a clinician" }}: "{{ a.override_reason }}"
+        </div>
+        {% endif %}
+        {% with tier=a.final_tier, model_tier=a.model_tier, probs=a.probabilities, flags=a.red_flags,
+                drivers=a.drivers, ward_name=a.recommended_ward.name if a.recommended_ward else None, ward_note=None,
+                doctor_name=a.recommended_doctor.display_name if a.recommended_doctor else None, specialty=a.specialty %}
+          {% include "visits/_result.html" %}
+        {% endwith %}
+      </div>
+    </div>
+
+    {% if visit.assessments|length > 1 %}
+    <div class="card">
+      <div class="card-head"><h2>Earlier assessments</h2></div>
+      <table class="table">
+        <thead><tr><th>Time</th><th>HR</th><th>RR</th><th>SpO&#8322;</th><th>BP</th><th>Temp</th><th>GCS</th><th>Result</th></tr></thead>
+        <tbody>
+        {% for x in visit.assessments[1:] %}
+        <tr>
+          <td>{{ x.created_at|time }}</td><td>{{ "%g"|format(x.heart_rate) }}</td><td>{{ "%g"|format(x.resp_rate) }}</td>
+          <td>{{ "%g"|format(x.spo2) }}</td><td>{{ "%g"|format(x.systolic_bp) if x.systolic_bp else "—" }}</td>
+          <td>{{ "%g"|format(x.temp_c) }}</td><td>{{ x.gcs_score }}</td><td>{{ tier_badge(x.effective_tier, short=True) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="card"><div class="empty">
+      <strong>Not triaged yet</strong>
+      Arrived {{ visit.arrived_at|ago }}.
+      {% if clinician and visit.is_active %}<div class="mt-2"><a class="btn btn-primary" href="/visits/{{ visit.id }}/triage">Start triage</a></div>{% endif %}
+    </div></div>
+    {% endif %}
+
+    {% if not visit.is_active %}
+    <div class="card">
+      <div class="card-head"><h2>Outcome</h2><span class="meta">{{ visit.completed_at|datetime }}</span></div>
+      <div class="card-body">
+        <b>{{ visit.disposition|label }}</b>
+        {% if visit.doctor_notes %}<p class="mt-1" style="white-space:pre-line">{{ visit.doctor_notes }}</p>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    {% if visit.is_active and clinician and a %}
+    <div class="card">
+      <div class="card-head"><h2>Placement</h2></div>
+      <form method="post" action="/visits/{{ visit.id }}/assign" class="card-body">
+        {{ csrf_input(csrf) }}
+        <div class="field mb-2">
+          <label for="ward">Ward</label>
+          <select class="input" id="ward" name="ward_id">
+            {% for w in wards %}<option value="{{ w.id }}" {% if w.id == visit.ward_id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="doc">Doctor</label>
+          <select class="input" id="doc" name="doctor_id">
+            {% for d in doctor_list %}<option value="{{ d.id }}" {% if d.id == visit.doctor_id %}selected{% endif %}>{{ d.display_name }} &middot; {{ d.specialty }}{% if not d.on_duty %} (off duty){% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-block mt-2">Update placement</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Change priority</h2></div>
+      <form method="post" action="/visits/{{ visit.id }}/override" class="card-body">
+        {{ csrf_input(csrf) }}
+        <div class="segmented mb-2" style="display:flex">
+          {% for t in ["high", "medium", "low"] %}
+          <label style="flex:1;text-align:center"><input type="radio" name="tier" value="{{ t }}" {% if visit.tier == t %}checked{% endif %}><span>{{ t|title }}</span></label>
+          {% endfor %}
+        </div>
+        <div class="field">
+          <label for="reason">Reason <span class="hint">recorded on the visit</span></label>
+          <input class="input" id="reason" name="reason" required minlength="3" placeholder="e.g. Clinical concern, worsening chest pain">
+        </div>
+        <button class="btn btn-block mt-2">Change priority</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Close visit</h2></div>
+      <form method="post" action="/visits/{{ visit.id }}/complete" class="card-body"
+            onsubmit="return confirm('Close this visit? The patient will leave the queue.')">
+        {{ csrf_input(csrf) }}
+        <div class="field mb-2">
+          <label for="disp">Outcome</label>
+          <select class="input" id="disp" name="disposition">
+            <option value="discharged">Discharged home</option>
+            <option value="admitted">Admitted to hospital</option>
+            <option value="referred">Referred elsewhere</option>
+            <option value="left_without_being_seen">Left without being seen</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="dn">Doctor's notes</label>
+          <textarea class="input" id="dn" name="doctor_notes" placeholder="Diagnosis, treatment given, follow-up"></textarea>
+        </div>
+        <button class="btn btn-block mt-2">Close visit</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head"><h2>Timeline</h2></div>
+      <div class="card-body">
+        <ul class="timeline">
+          {% for e in visit.events %}
+          <li class="k-{{ e.kind }}">
+            <div>{{ e.message }}</div>
+            <div class="when">{{ e.created_at|time }}{% if e.user %} &middot; {{ e.user.display_name }}{% endif %}</div>
+          </li>
+          {% else %}
+          <li>No events.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

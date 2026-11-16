@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, select, csrf_input %}
+{% block title %}Staff accounts{% endblock %}
+{% block actions %}{% endblock %}
+{% block content %}
+<div class="grid grid-main">
+  <div class="card">
+    <table class="table">
+      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for s in staff %}
+      <tr>
+        <td><div class="flex"><span class="avatar">{{ s.initials }}</span><div><b>{{ s.display_name }}</b>{% if s.specialty %}<div class="sub">{{ s.specialty }}</div>{% endif %}</div></div></td>
+        <td class="mono">{{ s.username }}</td>
+        <td style="text-transform:capitalize">{{ s.role }}</td>
+        <td>
+          {% if not s.is_active %}<span class="badge">Deactivated</span>
+          {% elif s.role == "doctor" %}<span class="badge {{ 'tier-low' if s.on_duty else '' }}">{{ "On duty" if s.on_duty else "Off duty" }}</span>
+          {% else %}<span class="badge tier-low">Active</span>{% endif %}
+        </td>
+        <td class="right">
+          {% if s.id != user.id %}
+          <form method="post" action="/admin/users/{{ s.id }}/active" class="inline">
+            {{ csrf_input(csrf) }}<button class="btn btn-sm btn-ghost {{ 'btn-danger' if s.is_active }}">{{ "Deactivate" if s.is_active else "Reactivate" }}</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form method="post" class="card" novalidate>
+    {{ csrf_input(csrf) }}
+    <div class="card-head"><h2>Add a staff member</h2></div>
+    <div class="card-body" style="display:grid;gap:12px">
+      {{ field("full_name", "Full name", values, errors, required=True) }}
+      {{ field("username", "Username", values, errors, hint="lowercase, e.g. dr.ali", required=True) }}
+      {{ select("role", "Role", roles, values, errors) }}
+      {{ select("specialty", "Specialty", specialties|zip_pairs, values, errors, blank="Doctors only") }}
+      {{ field("password", "Temporary password", values={}, errors=errors, type="password", hint="8+ characters", required=True) }}
+    </div>
+    <div class="card-foot"><button class="btn btn-primary btn-block">Create account</button></div>
+  </form>
+</div>
+{% endblock %}

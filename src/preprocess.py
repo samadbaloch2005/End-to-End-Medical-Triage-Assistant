@@ -1,53 +1,65 @@
+"""Feature definitions and preprocessing for the triage model.
+
+The preprocessor is kept separate from the data split so it can live inside
+a single sklearn/imblearn pipeline. That pipeline is what gets saved and
+served, which means the web app sends raw patient values and never has to
+re-implement scaling or one-hot encoding itself.
+"""
+from pathlib import Path
+
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-def get_prepared_data(csv_path="data/triage_records.csv"):
-    df = pd.read_csv(csv_path)
-    X = df.drop(columns=['triage_tier'])
-    y = df['triage_tier']
+DATA_PATH = Path("data/triage_records.csv")
+TARGET = "triage_tier"
 
-    numeric_features = [
-        'age', 'heart_rate', 'resp_rate', 'systolic_bp', 
-        'spo2', 'temp_c', 'blood_glucose', 'gcs_score', 'pain_score'
-    ]
-    categorical_features = ['gender', 'comorbidity']
+NUMERIC_FEATURES = [
+    "age",
+    "heart_rate",
+    "resp_rate",
+    "systolic_bp",
+    "spo2",
+    "temp_c",
+    "blood_glucose",
+    "gcs_score",
+    "pain_score",
+]
+CATEGORICAL_FEATURES = ["gender", "comorbidity"]
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
-    numeric_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='median')),
-        ('scaler', StandardScaler())
-    ])
+CLASS_NAMES = ["Low", "Medium", "High"]
 
-    categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
-    ])
 
-    preprocessor = ColumnTransformer(
+def build_preprocessor() -> ColumnTransformer:
+    numeric = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
+    categorical = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("encoder", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+        ]
+    )
+    return ColumnTransformer(
         transformers=[
-            ('num', numeric_transformer, numeric_features),
-            ('cat', categorical_transformer, categorical_features)
+            ("num", numeric, NUMERIC_FEATURES),
+            ("cat", categorical, CATEGORICAL_FEATURES),
         ]
     )
 
-    # Train / Test split strictly before preprocessing to prevent data leakage
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.20, random_state=42, stratify=y
-    )
 
-    X_train_transformed = preprocessor.fit_transform(X_train)
-    X_test_transformed = preprocessor.transform(X_test)
+def load_dataset(csv_path: Path | str = DATA_PATH) -> tuple[pd.DataFrame, pd.Series]:
+    df = pd.read_csv(csv_path)
+    return df[FEATURES], df[TARGET]
 
-    # Extract feature names after One-Hot Encoding
-    cat_cols = preprocessor.named_transformers_['cat'].named_steps['encoder'].get_feature_names_out(categorical_features)
-    all_feature_names = numeric_features + list(cat_cols)
 
-    # Multiclass SMOTE strictly on training set
-    smote = SMOTE(random_state=42)
-    X_train_res, y_train_res = smote.fit_resample(X_train_transformed, y_train)
-
-    return X_train_res, X_test_transformed, y_train_res, y_test, preprocessor, all_feature_names
+def split(X: pd.DataFrame, y: pd.Series, test_size: float = 0.2, seed: int = 42):
+    """Stratified hold-out split. Done before any fitting to avoid leakage."""
+    return train_test_split(X, y, test_size=test_size, random_state=seed, stratify=y)

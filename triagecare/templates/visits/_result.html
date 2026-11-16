@@ -1,0 +1,59 @@
+{# Shared by the live preview and the saved assessment.
+   Expects: tier, model_tier, probs (dict), flags (list of dicts), drivers, ward_name, ward_note, doctor_name, specialty #}
+<div class="result-tier {{ tier }}">
+  <div>
+    <div class="muted small">Priority</div>
+    <div class="big">{{ tier|title }} risk</div>
+  </div>
+  <div style="margin-left:auto;text-align:right" class="small">
+    <div class="muted">Be seen within</div>
+    <b>{{ TARGET_MINUTES[tier] }} min</b>
+  </div>
+</div>
+{% if tier != model_tier %}
+<p class="small mt-1 mb-1">The model said <b>{{ model_tier|title }}</b>. Safety rules raised it because of the flags below.</p>
+{% endif %}
+
+<h3 class="mt-2 mb-1">Model probabilities</h3>
+<div class="probs">
+  {% for t in ["high", "medium", "low"] %}
+  <div class="prob">
+    <span>{{ t|title }}</span>
+    <div class="track"><div class="fill {{ t }}" style="width:{{ (probs[t] * 100)|round(1) }}%"></div></div>
+    <span class="v">{{ probs[t]|pct }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+{% if flags %}
+<h3 class="mt-3 mb-1">Flags</h3>
+<div>
+  {% for f in flags %}
+  <div class="flag"><span class="flag-dot {{ f.level }}"></span><span>{{ f.message }}</span></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% set shown = drivers|selectattr("impact", "ne", 0)|list %}
+{% if shown %}
+<h3 class="mt-3 mb-1">What drove the score</h3>
+{% set max_impact = (shown|map(attribute="impact")|map("abs")|max) or 1 %}
+<div class="drivers">
+  {% for d in shown[:6] %}
+  {% set w = (d.impact|abs / max_impact * 50)|round(1) %}
+  <div class="driver" title="Changes expected risk by {{ '%+.2f'|format(d.impact) }}">
+    <span>{{ d.feature|feature }}</span>
+    <span class="val">{{ d|driver_value }}</span>
+    <span class="axis"><span class="push {{ 'up' if d.impact > 0 else 'down' }}" style="width:{{ w }}%"></span></span>
+  </div>
+  {% endfor %}
+</div>
+<p class="small muted mt-1">Red bars push towards higher risk, green bars towards lower, compared with a healthy adult.</p>
+{% endif %}
+
+<h3 class="mt-3 mb-1">Recommendation</h3>
+<dl class="kv" style="grid-template-columns:90px 1fr">
+  <dt>Ward</dt><dd><b>{{ ward_name or "—" }}</b>{% if ward_note %}<div class="sub">{{ ward_note }}</div>{% endif %}</dd>
+  <dt>Specialty</dt><dd>{{ specialty }}</dd>
+  <dt>Doctor</dt><dd>{{ doctor_name or "No doctor on duty" }}</dd>
+</dl>
