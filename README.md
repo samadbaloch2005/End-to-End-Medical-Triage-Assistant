@@ -166,13 +166,20 @@ docker compose up --build
 
 Then open <http://localhost:8000>. The image trains the model at build time and seeds demo data on first start.
 
-### Render (free hosting)
+### Render + Neon (free hosting that stays up)
 
-1. Push this repo to GitHub.
-2. On [render.com](https://render.com): **New → Blueprint**, then pick the repo. `render.yaml` creates a PostgreSQL database and the web service.
-3. Wait for the first build (a few minutes). The app is then live at `https://triagecare-xxxx.onrender.com`.
+The website runs on Render and the data lives in a Neon Postgres database. Both are free, and Neon's free database doesn't expire (Render's does, after 30 days).
 
-Free Render services sleep after 15 minutes of inactivity. The first request after that takes about a minute. Free databases expire after 30 days.
+1. **Database.** On [neon.tech](https://neon.tech), create a project (pick the region closest to your Render region, e.g. AWS Singapore or Frankfurt). Copy the connection string from **Connect**. It looks like `postgresql://user:password@ep-xxxx.aws.neon.tech/neondb?sslmode=require`.
+2. **Website.** On [render.com](https://render.com): **New → Blueprint**, pick this repo, and paste the Neon connection string when it asks for `DATABASE_URL`. Click **Apply**.
+3. Wait for the first build (5–10 minutes). The app is then live at `https://triagecare-xxxx.onrender.com`. On first start it creates the tables and the demo accounts.
+
+After that, every push to `main` redeploys automatically. Database migrations run on each start, and existing data is kept.
+
+Notes:
+- Free Render services sleep after 15 minutes of inactivity. The first request after that takes about a minute.
+- `SEED_DEMO` and `DEMO_MODE` are on in `render.yaml`, so anyone with the URL can sign in with the demo accounts. Don't enter real patient data. For a private deployment, set both to `"false"` in the Render dashboard and create an admin from the Render **Shell**: `python -m triagecare.cli create-admin yourname "Your Name"`.
+- Never commit the Neon connection string. It only goes in the Render dashboard (or your local `.env`).
 
 ---
 
