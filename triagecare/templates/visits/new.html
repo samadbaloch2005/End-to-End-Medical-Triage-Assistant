@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_input %}
+{% from "_icons.html" import icon %}
+{% block title %}New arrival{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/queue">Queue</a></div>{% endblock %}
+{% block actions %}{% endblock %}
+
+{% block content %}
+<div style="max-width:720px">
+{% if not patient %}
+  {% set pick = "visit" %}
+  {% include "_patient_picker.html" %}
+{% elif open_visit %}
+  <div class="card"><div class="card-body">
+    <b>{{ patient.full_name }} is already in the department.</b>
+    <p class="muted mt-1">Arrived {{ open_visit.arrived_at|ago }} with "{{ open_visit.chief_complaint }}".</p>
+    <a class="btn btn-primary" href="/visits/{{ open_visit.id }}">Open that visit</a>
+  </div></div>
+{% else %}
+<form method="post" class="card" novalidate>
+  {{ csrf_input(csrf) }}
+  <input type="hidden" name="patient_id" value="{{ patient.id }}">
+  <div class="card-head">
+    <span class="avatar">{{ patient.first_name[0] }}{{ patient.last_name[0] }}</span>
+    <div><b>{{ patient.full_name }}</b><div class="sub">{{ patient.mrn }} &middot; {{ patient.age }} &middot; {{ patient.gender }}{% if patient.comorbidity != "None" %} &middot; {{ patient.comorbidity }}{% endif %}</div></div>
+    <div class="actions"><a class="btn btn-sm btn-ghost" href="/visits/new">Change</a></div>
+  </div>
+  <div class="card-body">
+    {% if patient.allergies %}<div class="flash flash-error mb-2">Allergy: {{ patient.allergies }}</div>{% endif %}
+    <div class="field mb-2">
+      <label>How did they arrive?</label>
+      <div class="segmented">
+        {% for m in modes %}
+        <label><input type="radio" name="arrival_mode" value="{{ m }}" {% if (values.get("arrival_mode") or "walk_in") == m %}checked{% endif %}><span>{{ "Ambulance" if m == "ambulance" else "Walk-in" }}</span></label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="field {% if errors.chief_complaint %}has-error{% endif %}">
+      <label for="f-cc">Main complaint <span class="hint">in the patient's words</span></label>
+      <input class="input" id="f-cc" name="chief_complaint" value="{{ values.get('chief_complaint', '') }}" autofocus required
+             placeholder="e.g. Chest pain since this morning">
+      {% if errors.chief_complaint %}<div class="error">{{ errors.chief_complaint }}</div>{% endif %}
+    </div>
+  </div>
+  <div class="card-foot">
+    <div class="form-actions" style="margin:0">
+      <a class="btn btn-ghost" href="/queue">Cancel</a>
+      <button class="btn btn-primary">{{ "Add and start triage" if user.role == "nurse" else "Add to triage queue" }}</button>
+    </div>
+  </div>
+</form>
+{% endif %}
+</div>
+{% endblock %}

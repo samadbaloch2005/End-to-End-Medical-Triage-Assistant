@@ -1,0 +1,44 @@
+{% macro tier_badge(tier, short=False) -%}
+{%- if tier -%}
+<span class="badge tier-{{ tier }}">{{ tier|title }}{% if not short %} risk{% endif %}</span>
+{%- else -%}
+<span class="badge">Not triaged</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+{%- set names = {"waiting": "Awaiting triage", "triaged": "Waiting for doctor", "in_treatment": "In treatment", "completed": "Completed",
+                 "booked": "Booked", "checked_in": "Checked in", "cancelled": "Cancelled", "no_show": "No show"} -%}
+<span class="badge badge-outline">{{ names.get(status, status|label) }}</span>
+{%- endmacro %}
+
+{% macro field(name, label, values, errors, type="text", hint=None, required=False, cls="", unit=None, attrs="") -%}
+<div class="field {{ cls }} {% if errors.get(name) %}has-error{% endif %}">
+  <label for="f-{{ name }}">{{ label }}{% if hint %} <span class="hint">{{ hint }}</span>{% endif %}</label>
+  {% if unit %}<div class="input-unit">{% endif %}
+  <input class="input" id="f-{{ name }}" name="{{ name }}" type="{{ type }}"
+         value="{{ values.get(name) if values.get(name) is not none else '' }}"
+         {% if required %}required{% endif %} {{ attrs|safe }}>
+  {% if unit %}<span>{{ unit }}</span></div>{% endif %}
+  {% if errors.get(name) %}<div class="error">{{ errors[name] }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro select(name, label, options, values, errors, cls="", blank=None) -%}
+<div class="field {{ cls }} {% if errors.get(name) %}has-error{% endif %}">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <select class="input" id="f-{{ name }}" name="{{ name }}">
+    {% if blank %}<option value="">{{ blank }}</option>{% endif %}
+    {% for value, text in options %}
+    <option value="{{ value }}" {% if values.get(name)|string == value|string %}selected{% endif %}>{{ text }}</option>
+    {% endfor %}
+  </select>
+  {% if errors.get(name) %}<div class="error">{{ errors[name] }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro csrf_input(csrf) -%}<input type="hidden" name="csrf_token" value="{{ csrf }}">{%- endmacro %}
+
+{% macro wait_cell(entry) -%}
+<span class="q-wait {% if entry.overdue %}over{% endif %}">{{ entry.waited|minutes }}</span>
+{%- endmacro %}
