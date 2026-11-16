@@ -45,7 +45,7 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements*.txt
-      - run: pip install -r requirements.txt "psycopg[binary]>=3.1"
+      - run: pip install -r requirements.txt
       - run: python -m triagecare.cli train
       - name: Migrate and seed (twice, to check restarts are safe)
         run: |
