@@ -1,0 +1,11 @@
+# Normalise line endings so the repo works the same on Windows, macOS and Linux.
+* text=auto
+
+# Run inside Linux containers: must keep LF even on Windows checkouts.
+*.sh       text eol=lf
+Dockerfile text eol=lf
+
+# Binary files
+*.png  binary
+*.db   binary
+*.joblib binary
