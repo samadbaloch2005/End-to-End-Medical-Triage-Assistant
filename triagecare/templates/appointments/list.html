@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, csrf_input %}
+{% from "_icons.html" import icon %}
+{% block title %}Appointments{% endblock %}
+{% block actions %}
+{% if user.role in ("receptionist", "nurse", "admin") %}
+<a class="btn btn-primary" href="/appointments/new">{{ icon("plus") }} Book appointment</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="flex between wrap mb-2">
+  <div class="flex">
+    <a class="btn btn-sm" href="/appointments?day={{ prev_day.isoformat() }}" aria-label="Previous day">&larr;</a>
+    <form method="get" class="flex">
+      <input class="input" type="date" name="day" value="{{ day.isoformat() }}" onchange="this.form.submit()" style="height:28px;width:auto">
+    </form>
+    <a class="btn btn-sm" href="/appointments?day={{ next_day.isoformat() }}" aria-label="Next day">&rarr;</a>
+    {% if not is_today %}<a class="btn btn-sm btn-ghost" href="/appointments">Today</a>{% endif %}
+    <b style="margin-left:6px">{{ day.strftime("%A, %d %B") }}</b>
+  </div>
+  <div class="muted small">
+    {{ appointments|length }} booked &middot; {{ counts.checked_in }} arrived &middot; {{ counts.no_show }} no-show &middot; {{ counts.cancelled }} cancelled
+  </div>
+</div>
+
+<div class="card">
+  {% if appointments %}
+  <table class="table">
+    <thead><tr><th>Time</th><th>Patient</th><th>Reason</th><th>Doctor</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for a in appointments %}
+      <tr>
+        <td class="nowrap"><b>{{ a.scheduled_at|time }}</b></td>
+        <td><a class="row-link" href="/patients/{{ a.patient.id }}">{{ a.patient.full_name }}</a>
+            <div class="sub">{{ a.patient.age }}{{ a.patient.gender[0] }} &middot; {{ a.patient.phone or "no phone" }}</div></td>
+        <td>{{ a.reason }}</td>
+        <td>{{ a.doctor.display_name if a.doctor else "Any" }}</td>
+        <td>{{ status_badge(a.status) }}</td>
+        <td class="right nowrap">
+          {% if a.status == "booked" and user.role in ("receptionist", "nurse", "admin") %}
+          <form method="post" action="/appointments/{{ a.id }}/check-in" class="inline">
+            {{ csrf_input(csrf) }}<button class="btn btn-sm btn-primary">Check in</button>
+          </form>
+          <form method="post" action="/appointments/{{ a.id }}/status" class="inline">
+            {{ csrf_input(csrf) }}<input type="hidden" name="status" value="no_show">
+            <button class="btn btn-sm btn-ghost">No show</button>
+          </form>
+          <form method="post" action="/appointments/{{ a.id }}/status" class="inline"
+                onsubmit="return confirm('Cancel this appointment?')">
+            {{ csrf_input(csrf) }}<input type="hidden" name="status" value="cancelled">
+            <button class="btn btn-sm btn-ghost btn-danger">Cancel</button>
+          </form>
+          {% elif a.status == "checked_in" and a.visit %}
+          <a class="btn btn-sm btn-ghost" href="/visits/{{ a.visit.id }}">View visit</a>
+          {% elif a.status in ("no_show", "cancelled") and user.role in ("receptionist", "nurse", "admin") %}
+          <form method="post" action="/appointments/{{ a.id }}/status" class="inline">
+            {{ csrf_input(csrf) }}<input type="hidden" name="status" value="booked">
+            <button class="btn btn-sm btn-ghost">Restore</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><strong>No appointments on this day</strong>
+    {% if user.role in ("receptionist", "nurse", "admin") %}<a href="/appointments/new">Book one</a>{% endif %}</div>
+  {% endif %}
+</div>
+{% endblock %}

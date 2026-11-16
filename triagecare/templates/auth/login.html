@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Sign in{% endblock %}
+{% block bare %}
+<div class="auth-page">
+  <section class="auth-aside">
+    <div class="brand" style="padding:0">
+      <span class="brand-mark">{{ icon("pulse") }}</span>
+      <span>
+        <span class="brand-name" style="color:#fff">{{ settings.app_name }}</span><br>
+        <span class="brand-sub" style="color:#a9b6c4">{{ settings.hospital_name }}</span>
+      </span>
+    </div>
+    <div>
+      <h2>See the sickest patient first.</h2>
+      <p class="mt-2">Register arrivals, record vitals and get a risk level in seconds. The model's estimate is checked against clinical safety rules before a patient is placed in the queue.</p>
+      <div class="legend mt-3">
+        <div><b class="h">High</b><span>Seen within 10 minutes. Resuscitation or acute care.</span></div>
+        <div><b class="m">Medium</b><span>Seen within 30 minutes. Urgent care.</span></div>
+        <div><b class="l">Low</b><span>Seen within 2 hours. General OPD.</span></div>
+      </div>
+    </div>
+    <p class="small" style="margin:0">Decision support only. Final priority is always a clinician's call.</p>
+  </section>
+
+  <section class="auth-form">
+    <form method="post" action="/login" autocomplete="on">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <h1>Sign in</h1>
+      <p class="muted">Use your hospital staff account.</p>
+
+      {% if error %}<div class="flash flash-error mb-2">{{ error }}</div>{% endif %}
+
+      <div class="field mb-2">
+        <label for="username">Username</label>
+        <input class="input" id="username" name="username" value="{{ username or '' }}" autocomplete="username" autofocus required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input class="input" id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary btn-block mt-3">Sign in</button>
+
+      {% if settings.demo_mode %}
+      <div class="demo-accounts">
+        Demo accounts, password <code>{{ settings.demo_password }}</code>:
+        <div class="flex wrap mt-1">
+          {% for u in ["admin", "reception", "nurse", "dr.hamid", "dr.usman"] %}
+          <button type="button" data-demo-user="{{ u }}" data-demo-pass="{{ settings.demo_password }}">{{ u }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </form>
+  </section>
+</div>
+{% endblock %}
