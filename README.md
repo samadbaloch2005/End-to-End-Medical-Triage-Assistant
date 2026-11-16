@@ -183,8 +183,6 @@ Free Render services sleep after 15 minutes of inactivity. The first request aft
 - After changing `models.py`, create a migration: `alembic revision --autogenerate -m "what changed"`, check the generated file, and commit it.
 - Don't commit `.env`, `*.db` or the trained model. They're in `.gitignore` and `setup` rebuilds them.
 
-`app/dashboard.py` and the `.pkl` files in `models/` are from the earlier Streamlit prototype. They're kept for reference but not used by the new app.
-
 ## Team
 
 - Samad Ahmed ([samadbaloch2005](https://github.com/samadbaloch2005))
