@@ -1,0 +1,13 @@
+{# Shown on forms that need a patient but don't have one yet. `pick` is "visit" or "appointment". #}
+<div class="card">
+  <div class="card-head"><h2>Find the patient</h2><span class="meta">or <a href="/patients/new?then={{ pick }}">register a new one</a></span></div>
+  <div class="card-body" style="padding-bottom:0">
+    <input class="input" type="search" name="q" data-search autofocus autocomplete="off"
+           placeholder="Name, MR number, phone or CNIC"
+           hx-get="/patients?pick={{ pick }}" hx-trigger="input changed delay:250ms, search"
+           hx-target="#patient-results">
+  </div>
+  <div id="patient-results" class="picker-results mt-2">
+    <div class="empty">Start typing to search.</div>
+  </div>
+</div>

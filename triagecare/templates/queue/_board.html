@@ -1,0 +1,88 @@
+{% from "_macros.html" import tier_badge %}
+{% from "_icons.html" import icon %}
+{% set can_triage = user.role in ("nurse", "doctor", "admin") %}
+{% set is_doctor = user.role in ("doctor", "admin") %}
+
+<div class="lanes">
+  <div class="card">
+    <div class="card-head">
+      <h2>Awaiting triage</h2>
+      <span class="meta">{{ queue.awaiting|length }}</span>
+    </div>
+    {% for e in queue.awaiting %}
+    {% set v = e.visit %}
+    <a class="q-item" href="{{ '/visits/%d/triage'|format(v.id) if can_triage else '/visits/%d'|format(v.id) }}">
+      <div class="q-main">
+        <div class="q-name">{{ v.patient.full_name }}
+          {% if v.arrival_mode == "ambulance" %}<span class="badge plain tier-high" title="Ambulance arrival" style="margin-left:4px">Ambulance</span>{% endif %}
+        </div>
+        <div class="q-complaint">{{ v.chief_complaint }}</div>
+        <div class="q-meta"><span>{{ v.patient.age }}{{ v.patient.gender[0] }}</span><span>arrived {{ v.arrived_at|time }}</span></div>
+      </div>
+      <div class="q-side">
+        <span class="q-wait">{{ e.waited|minutes }}</span>
+        {% if can_triage %}<span class="btn btn-sm">Triage</span>{% endif %}
+      </div>
+    </a>
+    {% else %}
+    <div class="empty">Nobody waiting for triage.</div>
+    {% endfor %}
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head">
+        <h2>Waiting for a doctor</h2>
+        <span class="meta">{{ queue.triaged|length }} &middot; in order of priority</span>
+      </div>
+      {% for e in queue.triaged %}
+      {% set v = e.visit %}
+      <a class="q-item" href="/visits/{{ v.id }}">
+        <div class="q-pos">{{ e.position }}</div>
+        <div class="stripe {{ v.tier }}"></div>
+        <div class="q-main">
+          <div class="q-name">{{ v.patient.full_name }} <span class="muted" style="font-weight:400">{{ v.patient.age }}{{ v.patient.gender[0] }}</span></div>
+          <div class="q-complaint">{{ v.chief_complaint }}</div>
+          <div class="q-meta">
+            <span>{{ v.ward.name if v.ward else "No ward" }}</span>
+            <span>{{ v.doctor.display_name if v.doctor else "Unassigned" }}</span>
+            {% set a = v.latest_assessment %}
+            {% if a and a.red_flags %}<span class="text-high">{{ a.red_flags|length }} flag{{ "s" if a.red_flags|length > 1 }}</span>{% endif %}
+          </div>
+        </div>
+        <div class="q-side">
+          {{ tier_badge(v.tier, short=True) }}
+          <span class="q-wait {% if e.overdue %}over{% endif %}">{{ e.waited|minutes }}</span>
+          <span class="q-due">{% if e.overdue %}{{ -e.minutes_left }} min over target{% else %}{{ e.minutes_left }} min to target{% endif %}</span>
+        </div>
+      </a>
+      {% else %}
+      <div class="empty"><strong>No one waiting</strong>{{ "None of your patients are waiting." if mine else "Triaged patients will appear here." }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>In treatment</h2>
+        <span class="meta">{{ queue.treating|length }}</span>
+      </div>
+      {% for e in queue.treating %}
+      {% set v = e.visit %}
+      <a class="q-item" href="/visits/{{ v.id }}">
+        <div class="stripe {{ v.tier }}"></div>
+        <div class="q-main">
+          <div class="q-name">{{ v.patient.full_name }}</div>
+          <div class="q-meta">
+            <span>{{ v.ward.name if v.ward else "No ward" }}</span>
+            <span>{{ v.doctor.display_name if v.doctor else "—" }}</span>
+            <span>seen {{ v.seen_at|time }}</span>
+          </div>
+        </div>
+        <div class="q-side">{{ tier_badge(v.tier, short=True) }}<span class="q-due">{{ e.waited|minutes }} in dept.</span></div>
+      </a>
+      {% else %}
+      <div class="empty">No one in treatment.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, select, csrf_input %}
+{% block title %}Book appointment{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/appointments">Appointments</a></div>{% endblock %}
+{% block actions %}{% endblock %}
+
+{% block content %}
+<div style="max-width:720px">
+{% if not patient %}
+  {% set pick = "appointment" %}
+  {% include "_patient_picker.html" %}
+{% else %}
+<form method="post" class="card" novalidate>
+  {{ csrf_input(csrf) }}
+  <input type="hidden" name="patient_id" value="{{ patient.id }}">
+  <div class="card-head">
+    <span class="avatar">{{ patient.first_name[0] }}{{ patient.last_name[0] }}</span>
+    <div><b>{{ patient.full_name }}</b><div class="sub">{{ patient.mrn }} &middot; {{ patient.age }} &middot; {{ patient.gender }}</div></div>
+    <div class="actions"><a class="btn btn-sm btn-ghost" href="/appointments/new">Change</a></div>
+  </div>
+  <div class="card-body form-grid">
+    {{ field("scheduled_at", "Date and time", values, errors, type="datetime-local", required=True, attrs='step="600"') }}
+    {{ select("doctor_id", "Doctor", doctors|doctor_options, values, errors, blank="Any available doctor") }}
+    {{ field("reason", "Reason for visit", values, errors, cls="full", required=True, attrs='placeholder="e.g. Blood pressure review"') }}
+  </div>
+  <div class="card-foot">
+    <div class="form-actions" style="margin:0">
+      <a class="btn btn-ghost" href="/appointments">Cancel</a>
+      <button class="btn btn-primary">Book appointment</button>
+    </div>
+  </div>
+</form>
+{% endif %}
+</div>
+{% endblock %}
