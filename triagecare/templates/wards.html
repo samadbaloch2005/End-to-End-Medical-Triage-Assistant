@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tier_badge %}
+{% block title %}Wards{% endblock %}
+{% block content %}
+<p class="muted">Each square is a bed. Coloured beds are occupied, shaded by the patient's priority.</p>
+<div class="grid grid-2">
+  {% for w in wards %}
+  {% set patients = by_ward.get(w.ward.id, []) %}
+  <div class="card ward-card">
+    <div class="card-head">
+      <h2>{{ w.ward.name }}</h2>
+      <span class="meta">{{ w.occupied }} of {{ w.ward.capacity }} beds</span>
+      <div class="actions">
+        {% if w.free == 0 %}<span class="badge tier-high plain">Full</span>
+        {% else %}<span class="badge tier-low plain">{{ w.free }} free</span>{% endif %}
+      </div>
+    </div>
+    <div class="beds" aria-hidden="true">
+      {% for i in range(w.ward.capacity) %}
+      {% if i < patients|length %}<div class="bed used {{ patients[i].visit.tier or 'none' }}" title="{{ patients[i].visit.patient.full_name }}"></div>
+      {% elif i < w.occupied %}<div class="bed used none"></div>
+      {% else %}<div class="bed"></div>{% endif %}
+      {% endfor %}
+    </div>
+    <div class="card-body" style="padding-top:8px">
+      <p class="small muted">{{ w.ward.description }}</p>
+      {% if patients %}
+      <table class="table" style="margin:0 -16px -16px;width:calc(100% + 32px)">
+        <tbody>
+        {% for e in patients %}
+        <tr>
+          <td style="width:90px">{{ tier_badge(e.visit.tier, short=True) }}</td>
+          <td><a class="row-link" href="/visits/{{ e.visit.id }}">{{ e.visit.patient.full_name }}</a></td>
+          <td class="sub">{{ e.visit.doctor.display_name if e.visit.doctor else "—" }}</td>
+          <td class="right sub nowrap">{{ "treating" if e.visit.status == "in_treatment" else "waiting" }} &middot; {{ e.waited|minutes }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

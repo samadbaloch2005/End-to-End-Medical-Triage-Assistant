@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tier_badge, status_badge %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ patient.full_name }}{% endblock %}
+{% block head %}{% if assessment_count > 1 %}<script src="/static/vendor/chart.min.js" defer></script>{% endif %}{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/patients">Patients</a> / <span class="mono">{{ patient.mrn }}</span></div>{% endblock %}
+{% block actions %}
+{% if user.role in ("receptionist", "nurse", "admin") %}
+<a class="btn" href="/patients/{{ patient.id }}/edit">{{ icon("edit") }} Edit</a>
+<a class="btn" href="/appointments/new?patient_id={{ patient.id }}">{{ icon("calendar") }} Book appointment</a>
+{% if active_visit %}
+<a class="btn btn-primary" href="/visits/{{ active_visit.id }}">Open current visit</a>
+{% else %}
+<a class="btn btn-primary" href="/visits/new?patient_id={{ patient.id }}">{{ icon("plus") }} Register arrival</a>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-main">
+  <div class="stack">
+    {% if active_visit %}
+    <div class="card" style="border-left:4px solid var(--{{ active_visit.tier or 'none' }})">
+      <div class="card-body flex between wrap">
+        <div>
+          <div class="flex">{{ tier_badge(active_visit.tier) }} {{ status_badge(active_visit.status) }}</div>
+          <div class="mt-1"><b>In the department now</b> &middot; {{ active_visit.chief_complaint }}</div>
+          <div class="sub">Arrived {{ active_visit.arrived_at|ago }}{% if active_visit.ward %} &middot; {{ active_visit.ward.name }}{% endif %}</div>
+        </div>
+        <a class="btn" href="/visits/{{ active_visit.id }}">View visit</a>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if assessment_count > 1 %}
+    <div class="card">
+      <div class="card-head"><h2>Vitals over time</h2><span class="meta">{{ assessment_count }} assessments</span></div>
+      <div class="card-body" style="height:260px">
+        <canvas data-chart="vitals" data-values='{{ trend|tojson }}' aria-label="Vitals trend"></canvas>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head"><h2>Visits</h2><span class="meta">{{ patient.visits|length }}</span></div>
+      {% if patient.visits %}
+      <table class="table">
+        <thead><tr><th>Date</th><th>Reason</th><th>Priority</th><th>Ward</th><th>Outcome</th></tr></thead>
+        <tbody>
+        {% for v in patient.visits %}
+        <tr>
+          <td class="nowrap"><a class="row-link" href="/visits/{{ v.id }}">{{ v.arrived_at|date }}</a><div class="sub">{{ v.arrived_at|time }}</div></td>
+          <td>{{ v.chief_complaint }}</td>
+          <td>{{ tier_badge(v.tier, short=True) }}</td>
+          <td>{{ v.ward.name if v.ward else "—" }}</td>
+          <td>{{ v.disposition|label if v.disposition else status_badge(v.status) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No visits yet.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Appointments</h2></div>
+      {% if patient.appointments %}
+      <table class="table"><tbody>
+        {% for a in patient.appointments %}
+        <tr>
+          <td class="nowrap" style="width:180px">{{ a.scheduled_at|datetime }}</td>
+          <td>{{ a.reason }}</td>
+          <td class="right">{{ status_badge(a.status) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+      {% else %}
+      <div class="empty">No appointments.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="patient-head">
+        <span class="avatar">{{ patient.first_name[0] }}{{ patient.last_name[0] }}</span>
+        <div>
+          <h2 style="font-size:17px">{{ patient.full_name }}</h2>
+          <div class="facts"><span>{{ patient.age }} years</span><span>{{ patient.gender }}</span></div>
+        </div>
+      </div>
+      {% if patient.allergies %}
+      <div class="flash flash-error mt-2" style="font-size:13px">Allergy: {{ patient.allergies }}</div>
+      {% endif %}
+      <hr>
+      <dl class="kv">
+        <dt>MR number</dt><dd class="mono">{{ patient.mrn }}</dd>
+        <dt>Date of birth</dt><dd>{{ patient.date_of_birth.strftime("%d %b %Y") }}</dd>
+        <dt>Phone</dt><dd>{{ patient.phone or "—" }}</dd>
+        <dt>CNIC</dt><dd>{{ patient.cnic or "—" }}</dd>
+        <dt>Address</dt><dd>{{ patient.address or "—" }}</dd>
+        <dt>Comorbidity</dt><dd>{{ patient.comorbidity }}</dd>
+        <dt>Emergency contact</dt><dd>{{ patient.emergency_contact or "—" }}</dd>
+        <dt>Registered</dt><dd>{{ patient.created_at|date }}</dd>
+      </dl>
+      {% if patient.notes %}<hr><p class="small" style="white-space:pre-line">{{ patient.notes }}</p>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
