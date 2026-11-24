@@ -56,7 +56,9 @@ def build_preprocessor() -> ColumnTransformer:
 
 
 def load_dataset(csv_path: Path | str = DATA_PATH) -> tuple[pd.DataFrame, pd.Series]:
-    df = pd.read_csv(csv_path)
+    # keep_default_na=False: the comorbidity value "None" is a real category
+    # ("no comorbidity"), but pandas would otherwise read it as missing.
+    df = pd.read_csv(csv_path, keep_default_na=False, na_values=[""])
     return df[FEATURES], df[TARGET]
 
 
