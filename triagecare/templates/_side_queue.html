@@ -1,0 +1,13 @@
+{# Live list of queued patients in the sidebar. Highest priority first, then those awaiting triage. #}
+{% if side and side["items"] %}
+{% for q in side["items"][:7] %}
+<a href="/visits/{{ q.id }}" title="{{ q.name }}: {{ 'awaiting triage' if q.tier == 'waiting' else q.tier ~ ' risk' }}, waiting {{ q.waited|minutes }}">
+  <span class="sq-dot {{ q.tier }}"></span>
+  <span class="sq-name">{{ q.name }}</span>
+  <span class="sq-wait" {% if q.overdue %}style="color:#fb7185"{% endif %}>{{ q.waited|minutes }}</span>
+</a>
+{% endfor %}
+{% if side["items"]|length > 7 %}<span class="sq-more">+{{ side["items"]|length - 7 }} more in queue</span>{% endif %}
+{% else %}
+<span class="sq-more">Nobody waiting</span>
+{% endif %}

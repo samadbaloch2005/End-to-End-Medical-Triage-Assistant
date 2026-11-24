@@ -149,7 +149,7 @@ async def triage_preview(request: Request, visit_id: int, user: User = Depends(c
         result = assess(db, data.model_dump(), visit.patient.age, visit.patient.gender, visit.patient.comorbidity, visit)
     except ModelUnavailable as exc:
         return render(request, "visits/_preview.html", {"model_error": str(exc)})
-    return render(request, "visits/_preview.html", {"r": result})
+    return render(request, "visits/_preview.html", {"r": result, "vitals": data.model_dump()})
 
 
 @router.post("/{visit_id}/triage")

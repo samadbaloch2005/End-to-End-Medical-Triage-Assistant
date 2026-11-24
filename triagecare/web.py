@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from triagecare import __version__
 from triagecare.config import get_settings
 from triagecare.deps import csrf_token
+from triagecare.services.clinical import care_plan, possible_concerns, read_vitals, vitals_from_assessment
 from triagecare.services.triage import FEATURE_LABELS, TARGET_MINUTES, describe_driver
 from triagecare.timeutil import humanize_minutes, minutes_since, to_local
 
@@ -48,6 +49,10 @@ env.filters["doctor_options"] = lambda ds: [(d.id, f"{d.display_name} \u00b7 {d.
 env.filters["zip_pairs"] = lambda items: [(i, i) for i in items]
 env.globals["TARGET_MINUTES"] = TARGET_MINUTES
 env.globals["app_version"] = __version__
+env.globals["read_vitals"] = read_vitals
+env.globals["possible_concerns"] = possible_concerns
+env.globals["care_plan"] = care_plan
+env.globals["vitals_of"] = vitals_from_assessment
 
 
 def flash(request: Request, message: str, kind: str = "success") -> None:
@@ -58,16 +63,23 @@ def _pop_flashes(request: Request) -> list[dict]:
     return request.session.pop("flashes", [])
 
 
-def _queue_count() -> int:
-    from sqlalchemy import func, select
-
+def side_queue() -> dict:
+    """Patients waiting for triage or a doctor, for the live list in the sidebar."""
     from triagecare.db import SessionLocal
-    from triagecare.models import Visit, VisitStatus
+    from triagecare.services.queue import build_queue
 
     with SessionLocal() as db:
-        return db.scalar(
-            select(func.count(Visit.id)).where(Visit.status.in_([VisitStatus.WAITING, VisitStatus.TRIAGED]))
-        ) or 0
+        q = build_queue(db)
+        items = [
+            {"id": e.visit.id, "name": e.visit.patient.full_name, "tier": e.visit.tier or "waiting",
+             "waited": e.waited, "overdue": e.overdue, "status": e.visit.status}
+            for e in q["triaged"]
+        ] + [
+            {"id": e.visit.id, "name": e.visit.patient.full_name, "tier": "waiting",
+             "waited": e.waited, "overdue": False, "status": e.visit.status}
+            for e in q["awaiting"]
+        ]
+    return {"count": len(items), "items": items}
 
 
 def render(request: Request, name: str, context: dict[str, Any] | None = None, status_code: int = 200) -> HTMLResponse:
@@ -81,7 +93,8 @@ def render(request: Request, name: str, context: dict[str, Any] | None = None, s
     }
     ctx.update(context or {})
     if ctx.get("user") and not ctx["is_htmx"]:
-        ctx["queue_count"] = _queue_count()
+        ctx["side"] = side_queue()
+        ctx["queue_count"] = ctx["side"]["count"]
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 

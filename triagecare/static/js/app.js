@@ -30,21 +30,22 @@
     btn.addEventListener("click", () => {
       document.getElementById("username").value = btn.dataset.demoUser;
       document.getElementById("password").value = btn.dataset.demoPass;
+      document.querySelectorAll("[data-demo-user]").forEach((b) => b.classList.toggle("picked", b === btn));
       document.getElementById("password").focus();
     });
   });
 
   // Charts. Each <canvas data-chart="..."> carries its data as JSON.
   const palette = {
-    ink: "#3d454d", grid: "#ece9e3", accent: "#1d4f91",
-    high: "#b42318", medium: "#d38a1c", low: "#1f7a4d",
+    ink: "#334155", grid: "#eef1f7", accent: "#4f46e5",
+    high: "#e11d48", medium: "#f59e0b", low: "#10b981",
   };
 
   function drawCharts(root) {
     if (!window.Chart) return;
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.font.size = 12;
-    Chart.defaults.color = "#6b737b";
+    Chart.defaults.color = "#64748b";
 
     root.querySelectorAll("canvas[data-chart]").forEach((canvas) => {
       if (canvas._chart) return;
@@ -64,7 +65,8 @@
           labels: data.map((_, h) => String(h).padStart(2, "0")),
           datasets: [{
             data,
-            backgroundColor: data.map((_, h) => (h === now ? palette.accent : "#b9c8dd")),
+            backgroundColor: data.map((_, h) => (h === now ? palette.accent : "#c7d2fe")),
+            hoverBackgroundColor: palette.accent,
             borderRadius: 3,
             maxBarThickness: 18,
           }],
@@ -113,6 +115,40 @@
       };
     },
 
+    risk(data) {
+      const total = data.high + data.medium + data.low;
+      return {
+        type: "doughnut",
+        data: {
+          labels: ["High", "Medium", "Low"],
+          datasets: [{
+            data: total ? [data.high, data.medium, data.low] : [0, 0, 1],
+            backgroundColor: total ? [palette.high, palette.medium, palette.low] : ["#eef1f7"],
+            borderWidth: 3, borderColor: "#fff", hoverOffset: 6,
+          }],
+        },
+        options: {
+          maintainAspectRatio: false, cutout: "68%",
+          plugins: { legend: { display: false }, tooltip: { enabled: total > 0 } },
+        },
+        plugins: [{
+          id: "centre",
+          afterDraw(chart) {
+            const { ctx, chartArea: a } = chart;
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#0f172a";
+            ctx.font = "700 26px " + Chart.defaults.font.family;
+            ctx.fillText(total, (a.left + a.right) / 2, (a.top + a.bottom) / 2 + 4);
+            ctx.fillStyle = "#64748b";
+            ctx.font = "500 11px " + Chart.defaults.font.family;
+            ctx.fillText("triaged", (a.left + a.right) / 2, (a.top + a.bottom) / 2 + 20);
+            ctx.restore();
+          },
+        }],
+      };
+    },
+
     leaderboard(data) {
       return {
         type: "bar",
@@ -121,7 +157,7 @@
           datasets: [{
             label: "CV ROC-AUC",
             data: data.map((d) => d.cv_roc_auc),
-            backgroundColor: data.map((_, i) => (i === 0 ? palette.accent : "#b9c8dd")),
+            backgroundColor: data.map((_, i) => (i === 0 ? palette.accent : "#c7d2fe")),
             borderRadius: 3,
             maxBarThickness: 26,
           }],
@@ -135,6 +171,64 @@
       };
     },
   };
+
+  // Pop-up alerts when a patient with critical vitals is waiting.
+  // Each alert shows once per browser; the dashboard lists all of them.
+  const shell = document.querySelector("[data-alerts]");
+  const toasts = document.getElementById("toasts");
+  const seenKey = "triagecare.seenAlerts";
+  const seen = new Set(JSON.parse((() => { try { return localStorage.getItem(seenKey); } catch { return null; } })() || "[]"));
+
+  function beep() {
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.22].forEach((t) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
+        g.gain.setValueAtTime(0.08, ac.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + t + 0.18);
+        o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.2);
+      });
+    } catch { /* sound is optional */ }
+  }
+
+  function showToast(a) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    if (a.level !== "critical") el.style.borderLeftColor = "var(--medium-bright)";
+    const body = document.createElement("div");
+    const title = document.createElement("b");
+    title.textContent = `${a.title}: ${a.patient}`;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = a.details.join(" · ");
+    const link = document.createElement("a");
+    link.href = `/visits/${a.visit_id}`;
+    link.textContent = "Open patient";
+    link.className = "small";
+    body.append(title, sub, link);
+    const close = document.createElement("button");
+    close.type = "button"; close.setAttribute("aria-label", "Dismiss"); close.textContent = "×";
+    close.addEventListener("click", () => el.remove());
+    el.append(body, close);
+    toasts.append(el);
+    setTimeout(() => el.remove(), 20000);
+  }
+
+  async function pollAlerts() {
+    if (!shell || !toasts || document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch(shell.dataset.alerts, { headers: { Accept: "application/json" } });
+      if (!res.ok) return;
+      const alerts = await res.json();
+      const fresh = alerts.filter((a) => !seen.has(`${a.visit_id}:${a.level}`));
+      fresh.slice(0, 3).forEach(showToast);
+      if (fresh.some((a) => a.level === "critical")) beep();
+      fresh.forEach((a) => seen.add(`${a.visit_id}:${a.level}`));
+      try { localStorage.setItem(seenKey, JSON.stringify([...seen].slice(-200))); } catch { /* private mode */ }
+    } catch { /* offline: try again next time */ }
+  }
+  if (shell) { pollAlerts(); setInterval(pollAlerts, 20000); }
 
   drawCharts(document);
   document.body.addEventListener("htmx:afterSwap", (e) => {

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 from triagecare.db import get_db
 from triagecare.deps import current_user
 from triagecare.models import Role, User, VisitEvent
+from triagecare.services.clinical import critical_alerts
 from triagecare.services.queue import build_queue, dashboard_stats, todays_appointments, ward_board
 from triagecare.timeutil import to_local, utcnow
 from triagecare.web import render
@@ -37,5 +38,6 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
             "wards": ward_board(db),
             "appointments": todays_appointments(db)[:6],
             "recent": recent,
+            "alerts": critical_alerts(db),
         },
     )

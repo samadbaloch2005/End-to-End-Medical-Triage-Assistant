@@ -49,6 +49,14 @@
             {% set a = v.latest_assessment %}
             {% if a and a.red_flags %}<span class="text-high">{{ a.red_flags|length }} flag{{ "s" if a.red_flags|length > 1 }}</span>{% endif %}
           </div>
+          {% if a %}
+          {% set short = {"heart_rate": "HR", "spo2": "SpO₂", "systolic_bp": "BP", "resp_rate": "RR", "temp_c": "T", "gcs_score": "GCS", "blood_glucose": "Glu"} %}
+          <div class="mini-vitals">
+            {% for r in read_vitals(vitals_of(a), a.red_flags) if r.key in short and r.value is not none and (r.abnormal or r.key in ("heart_rate", "spo2", "systolic_bp", "temp_c")) %}
+            <span class="mv {{ r.severity if r.abnormal }}">{{ short[r.key] }} {{ r.display }}{% if r.key == "systolic_bp" and a.diastolic_bp %}/{{ "%g"|format(a.diastolic_bp) }}{% endif %}{% if r.status == "high" %}↑{% elif r.status == "low" %}↓{% endif %}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
         </div>
         <div class="q-side">
           {{ tier_badge(v.tier, short=True) }}

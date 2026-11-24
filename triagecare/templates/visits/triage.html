@@ -6,7 +6,7 @@
 
 {% block content %}
 {% set p = visit.patient %}
-<div class="grid grid-main" style="grid-template-columns:minmax(0,1fr) 380px">
+<div class="grid grid-main grid-triage">
   {# The form posts normally to save. HTMX only listens for typing, to refresh the preview. #}
   <form method="post" action="/visits/{{ visit.id }}/triage" id="triage-form" class="card" novalidate
         hx-post="/visits/{{ visit.id }}/triage/preview"
@@ -61,7 +61,7 @@
     </div>
   </form>
 
-  <aside class="card" style="position:sticky;top:16px">
+  <aside class="card triage-aside">
     <div class="card-head"><h2>Risk assessment</h2><span class="meta">updates as you type</span></div>
     <div id="preview" class="card-body">
       <div class="empty" style="padding:12px 0">Enter heart rate, respiratory rate, SpO&#8322; and temperature to see the risk.</div>

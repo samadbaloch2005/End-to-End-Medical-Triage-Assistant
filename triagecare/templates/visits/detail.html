@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import tier_badge, status_badge, csrf_input %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ visit.patient.full_name }}{% endblock %}
 {% block crumbs %}<div class="crumbs"><a href="/queue">Queue</a> / Visit #{{ visit.id }}</div>{% endblock %}
 {% set p = visit.patient %}
@@ -69,6 +70,29 @@
       {% if a.notes %}<div class="card-body" style="border-top:1px solid var(--line)"><div class="muted small mb-1">Triage notes</div><div style="white-space:pre-line">{{ a.notes }}</div></div>{% endif %}
     </div>
 
+    {% set plan = care_plan(a.effective_tier, vitals_of(a), a.red_flags, visit.chief_complaint, p.comorbidity, p.allergies) %}
+    <div class="card" id="care-plan">
+      <div class="card-head">
+        <span class="stat-ico" style="position:static;width:32px;height:32px">{{ icon("stethoscope") }}</span>
+        <h2>Suggested care plan</h2>
+        <span class="meta">{{ "for you as the treating doctor" if user.role == "doctor" else "for the treating doctor" }}</span>
+        <div class="actions no-print"><button type="button" class="btn btn-sm btn-ghost" onclick="window.print()">Print</button></div>
+      </div>
+      <div class="card-body">
+        {% for sec in plan %}
+        <div class="care-section {{ 'urgent' if sec.urgent }}">
+          <h3>{% if sec.urgent %}{{ icon("alert") }}{% endif %}{{ sec.title }} <span class="n">{{ sec.items|length }}</span></h3>
+          <ul class="care-list">
+            {% for item in sec.items %}
+            <li><label><input type="checkbox"><span>{{ item }}</span></label></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+        <p class="small muted mt-2 mb-0">Generated from the vitals, flags, complaint and history. Decision support only: follow local protocols and clinical judgement. Ticks are not saved.</p>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-head"><h2>Triage decision</h2><span class="meta">{{ a.model_version }}</span></div>
       <div class="card-body">
@@ -79,7 +103,7 @@
         {% endif %}
         {% with tier=a.final_tier, model_tier=a.model_tier, probs=a.probabilities, flags=a.red_flags,
                 drivers=a.drivers, ward_name=a.recommended_ward.name if a.recommended_ward else None, ward_note=None,
-                doctor_name=a.recommended_doctor.display_name if a.recommended_doctor else None, specialty=a.specialty %}
+                doctor_name=a.recommended_doctor.display_name if a.recommended_doctor else None, specialty=a.specialty, vitals=vitals_of(a) %}
           {% include "visits/_result.html" %}
         {% endwith %}
       </div>

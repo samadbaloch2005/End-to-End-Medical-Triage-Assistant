@@ -1,5 +1,6 @@
 {# Shared by the live preview and the saved assessment.
-   Expects: tier, model_tier, probs (dict), flags (list of dicts), drivers, ward_name, ward_note, doctor_name, specialty #}
+   Expects: tier, model_tier, probs (dict), flags (list), drivers, ward_name, ward_note, doctor_name, specialty, vitals (dict) #}
+{% set score = ((probs["high"] + 0.5 * probs["medium"]) * 100)|round|int %}
 <div class="result-tier {{ tier }}">
   <div>
     <div class="muted small">Priority</div>
@@ -14,15 +15,55 @@
 <p class="small mt-1 mb-1">The model said <b>{{ model_tier|title }}</b>. Safety rules raised it because of the flags below.</p>
 {% endif %}
 
-<h3 class="mt-2 mb-1">Model probabilities</h3>
-<div class="probs">
-  {% for t in ["high", "medium", "low"] %}
-  <div class="prob">
-    <span>{{ t|title }}</span>
-    <div class="track"><div class="fill {{ t }}" style="width:{{ (probs[t] * 100)|round(1) }}%"></div></div>
-    <span class="v">{{ probs[t]|pct }}</span>
+{# 3D view of the model's probabilities #}
+<div class="view3d mt-2" aria-label="3D chart of risk probabilities">
+  <span class="caption">3D risk view</span>
+  <div class="orb {{ tier }}">{{ tier }}</div>
+  <div class="scene3d">
+    <div class="stage3d">
+      <div class="floor3d"></div>
+      {% for t, x in [("low", -70), ("medium", 0), ("high", 70)] %}
+      <div class="bar3d {{ t }}" style="--h:{{ [probs[t] * 130, 4]|max|round|int }}px; left:{{ x }}px; animation-delay:{{ loop.index0 * 0.12 }}s">
+        <i class="f"></i><i class="b"></i><i class="r"></i><i class="l"></i><i class="t"></i>
+        <span class="lbl">{{ probs[t]|pct }}</span>
+      </div>
+      {% endfor %}
+    </div>
   </div>
-  {% endfor %}
+  <div class="legend3d">
+    <span><i style="background:#10b981"></i>Low</span><span><i style="background:#f59e0b"></i>Medium</span><span><i style="background:#e11d48"></i>High</span>
+  </div>
+</div>
+
+{# Gauge: one number for overall risk #}
+<div class="gauge-wrap mt-2">
+  <div class="gauge">
+    <svg viewBox="0 0 150 90" role="img" aria-label="Risk score {{ score }} out of 100">
+      <defs>
+        <linearGradient id="gauge-grad" x1="0" x2="1">
+          <stop offset="0" stop-color="#10b981"/><stop offset=".5" stop-color="#f59e0b"/><stop offset="1" stop-color="#e11d48"/>
+        </linearGradient>
+      </defs>
+      <path d="M15 75 A60 60 0 0 1 135 75" fill="none" stroke="#edf1f7" stroke-width="14" stroke-linecap="round"/>
+      <path d="M15 75 A60 60 0 0 1 135 75" fill="none" stroke="url(#gauge-grad)" stroke-width="14" stroke-linecap="round"
+            pathLength="100" stroke-dasharray="{{ score }} 100"/>
+      <g class="needle" style="transform:rotate({{ -90 + score * 1.8 }}deg)">
+        <line x1="75" y1="75" x2="75" y2="27" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+      </g>
+      <circle cx="75" cy="75" r="6" fill="#0f172a"/>
+    </svg>
+  </div>
+  <div style="flex:1;min-width:0">
+    <div class="gauge-score">{{ score }}<small> / 100 risk score</small></div>
+    <div class="stack-bar mt-1" title="Model probabilities">
+      {% for t in ["low", "medium", "high"] %}<span class="{{ t }}" style="width:{{ (probs[t] * 100)|round(1) }}%"></span>{% endfor %}
+    </div>
+    <div class="legend-row">
+      <span><i style="background:#10b981"></i>Low {{ probs["low"]|pct }}</span>
+      <span><i style="background:#f59e0b"></i>Medium {{ probs["medium"]|pct }}</span>
+      <span><i style="background:#e11d48"></i>High {{ probs["high"]|pct }}</span>
+    </div>
+  </div>
 </div>
 
 {% if flags %}
@@ -32,6 +73,46 @@
   <div class="flag"><span class="flag-dot {{ f.level }}"></span><span>{{ f.message }}</span></div>
   {% endfor %}
 </div>
+{% endif %}
+
+{% if vitals %}
+{% set readings = read_vitals(vitals, flags) %}
+{% set abnormal = readings|selectattr("abnormal")|list %}
+<h3 class="mt-3 mb-1">Vitals against normal range</h3>
+<p class="small muted mb-1">
+  {% if abnormal %}{{ abnormal|length }} vital{{ "s" if abnormal|length != 1 }} outside the normal adult range. Green band is normal.
+  {% else %}All recorded vitals are in the normal adult range.{% endif %}
+</p>
+<div class="vranges">
+  {% for v in readings %}
+  <div class="vr {{ v.severity if v.abnormal else ('missing' if v.status == 'missing' else 'ok') }}">
+    <span class="name">{{ v.label }}</span>
+    <span class="val">{{ v.display }}{% if v.value is not none %} <small>{{ v.unit }}</small>{% endif %}
+      {%- if v.status == "high" %}<span class="arrow">▲</span>{% elif v.status == "low" %}<span class="arrow">▼</span>{% endif %}</span>
+    <span class="track-range" title="Normal {{ '%g'|format(v.low) }}–{{ '%g'|format(v.high) }} {{ v.unit }}">
+      <span class="band" style="left:{{ v.band[0] }}%;width:{{ [v.band[1] - v.band[0], 1.5]|max }}%"></span>
+      {% if v.value is not none %}<span class="dot" style="left:{{ v.marker }}%"></span>{% endif %}
+    </span>
+    {% if v.abnormal and v.meaning %}
+    <span class="why"><b>{{ v.meaning }}</b> &middot; may point to {{ v.causes }}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% set concerns = possible_concerns(vitals) %}
+{% if concerns %}
+<h3 class="mt-3 mb-1">Possible causes to rule out</h3>
+<div class="concerns">
+  {% for c in concerns %}
+  <div class="concern {{ c.level }}">
+    <b>{{ c.name }}</b>
+    <div class="chips">{% for x in c.because %}<span class="chip {{ 'amber' if c.level == 'amber' }}">{{ x }}</span>{% endfor %}</div>
+    {% if c.note %}<div class="sub">{{ c.note }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 {% endif %}
 
 {% set shown = drivers|selectattr("impact", "ne", 0)|list %}

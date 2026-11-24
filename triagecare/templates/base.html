@@ -6,7 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf }}">
   <title>{% block title %}{% endblock %} · {{ settings.app_name }}</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231d4f91'/><path d='M6 17h5l3-7 4 13 3-6h5' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234f46e5'/><path d='M6 17h5l3-7 4 13 3-6h5' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}">
   <script src="/static/vendor/htmx.min.js" defer></script>
   {% block head %}{% endblock %}
@@ -14,7 +17,7 @@
 <body>
 {% if user %}
 {% set role = user.role %}
-<div class="shell">
+<div class="shell" data-alerts="/alerts.json">
   <aside class="sidebar">
     <a class="brand" href="/" style="text-decoration:none;color:inherit">
       <span class="brand-mark">{{ icon("pulse") }}</span>
@@ -29,6 +32,10 @@
       <a href="/queue" class="{{ 'active' if path.startswith('/queue') or path.startswith('/visits') }}">
         {{ icon("queue") }} Queue {% if queue_count %}<span class="count">{{ queue_count }}</span>{% endif %}
       </a>
+      <div class="side-queue" id="side-queue" aria-label="Patients in the queue"
+           hx-get="/queue/side" hx-trigger="every 15s [document.visibilityState === 'visible']" hx-swap="innerHTML">
+        {% include "_side_queue.html" %}
+      </div>
       <a href="/patients" class="{{ 'active' if path.startswith('/patients') }}">{{ icon("patients") }} Patients</a>
       <a href="/appointments" class="{{ 'active' if path.startswith('/appointments') }}">{{ icon("calendar") }} Appointments</a>
       <a href="/wards" class="{{ 'active' if path.startswith('/wards') }}">{{ icon("bed") }} Wards</a>
@@ -81,6 +88,7 @@
     </header>
 
     <div class="content">
+      <div class="toasts" id="toasts" aria-live="assertive"></div>
       {% if flashes %}
       <div class="flashes" role="status">
         {% for f in flashes %}

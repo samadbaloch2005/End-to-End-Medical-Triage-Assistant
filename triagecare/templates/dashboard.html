@@ -1,30 +1,61 @@
 {% extends "base.html" %}
 {% from "_macros.html" import tier_badge, status_badge %}
+{% from "_icons.html" import icon %}
 {% block title %}Overview{% endblock %}
 {% block crumbs %}<div class="crumbs">{{ now_label }}</div>{% endblock %}
 {% block heading %}Good {{ greeting }}, {{ user.full_name.split()[0] }}{% endblock %}
 {% block head %}<script src="/static/vendor/chart.min.js" defer></script>{% endblock %}
 
 {% block content %}
+{% if alerts %}
+{% set crit = alerts|selectattr("level", "eq", "critical")|list %}
+<div class="card alerts mb-2">
+  <div class="card-head">
+    <h2>{{ icon("alert") }} {{ "Critical patients waiting" if crit else "Patients needing attention" }}</h2>
+    <span class="meta">{{ crit|length }} critical, {{ alerts|length - crit|length }} to watch &middot; not yet with a doctor</span>
+    <div class="actions"><a class="btn btn-sm" href="/queue">Open queue</a></div>
+  </div>
+  {% for al in alerts[:6] %}
+  {% set v = al.visit %}
+  <a class="alert-row {{ al.level }}" href="/visits/{{ v.id }}{{ '/triage' if v.status == 'waiting' and user.role in ('nurse','doctor','admin') else '' }}">
+    <span class="alert-ico">{{ icon("heart" if al.level == "critical" else "alert") }}</span>
+    <div class="alert-main">
+      <div class="alert-title">{{ v.patient.full_name }} <span class="muted" style="font-weight:400">{{ v.patient.age }}{{ v.patient.gender[0] }}</span><small>{{ al.title }}</small></div>
+      <div class="chips">{% for d in al.details[:4] %}<span class="chip {{ 'amber' if al.level != 'critical' }}">{{ d }}</span>{% endfor %}
+        {% if v.ward %}<span class="chip gray">{{ v.ward.name }}</span>{% endif %}</div>
+    </div>
+    <div class="right nowrap">
+      <div class="q-wait {% if al.level == 'critical' %}over{% endif %}">{{ al.waited|minutes }}</div>
+      <div class="sub">{{ "awaiting triage" if v.status == "waiting" else "waiting for doctor" }}</div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="grid grid-4">
   <div class="card stat">
+    <span class="stat-ico">{{ icon("patients") }}</span>
     <div class="stat-label">In the department</div>
     <div class="stat-value">{{ stats.in_department }}</div>
     <div class="stat-note">{{ stats.arrivals_today }} arrivals today, {{ stats.completed_today }} discharged</div>
   </div>
-  <div class="card stat">
+  <div class="card stat amber">
+    <span class="stat-ico amber">{{ icon("clipboard") }}</span>
     <div class="stat-label">Awaiting triage</div>
     <div class="stat-value">{{ stats.awaiting_triage }}</div>
     <div class="stat-note">{% if stats.awaiting_triage %}<a href="/queue">Open the queue</a>{% else %}Nobody waiting{% endif %}</div>
   </div>
-  <div class="card stat">
+  <div class="card stat {{ 'red' if stats.overdue else 'green' }}">
+    <span class="stat-ico {{ 'red' if stats.overdue else 'green' }}">{{ icon("stethoscope") }}</span>
     <div class="stat-label">Waiting for a doctor</div>
     <div class="stat-value">{{ stats.waiting_for_doctor }}</div>
     <div class="stat-note {% if stats.overdue %}warn{% endif %}">
       {% if stats.overdue %}{{ stats.overdue }} past target time{% else %}All within target{% endif %}
     </div>
   </div>
-  <div class="card stat">
+  <div class="card stat green">
+    <span class="stat-ico green">{{ icon("clock") }}</span>
     <div class="stat-label">Average wait to be seen</div>
     <div class="stat-value">{{ stats.avg_wait|minutes if stats.avg_wait is not none else "—" }}</div>
     <div class="stat-note">Arrival to doctor, today</div>
@@ -102,15 +133,20 @@
       <div class="card">
         <div class="card-head"><h2>Today by risk</h2></div>
         <div class="card-body">
-          {% set total = (stats.by_tier.values()|sum) or 1 %}
-          <div class="probs">
-            {% for t in ["high", "medium", "low"] %}
-            <div class="prob" style="grid-template-columns:70px 1fr 30px">
-              <span>{{ t|title }}</span>
-              <div class="track"><div class="fill {{ t }}" style="width:{{ (stats.by_tier[t] / total * 100)|round }}%"></div></div>
-              <span class="v">{{ stats.by_tier[t] }}</span>
+          <div class="flex" style="gap:16px;align-items:center">
+            <div style="width:140px;height:140px;flex:none">
+              <canvas data-chart="risk" data-values='{{ stats.by_tier|tojson }}' aria-label="Patients by risk level today"></canvas>
             </div>
-            {% endfor %}
+            <div class="probs" style="flex:1">
+              {% set total = (stats.by_tier.values()|sum) or 1 %}
+              {% for t in ["high", "medium", "low"] %}
+              <div class="prob" style="grid-template-columns:62px 1fr 26px">
+                <span>{{ t|title }}</span>
+                <div class="track"><div class="fill {{ t }}" style="width:{{ (stats.by_tier[t] / total * 100)|round }}%"></div></div>
+                <span class="v">{{ stats.by_tier[t] }}</span>
+              </div>
+              {% endfor %}
+            </div>
           </div>
           <hr>
           <div class="flex between small">
